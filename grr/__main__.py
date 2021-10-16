@@ -1,8 +1,11 @@
 import coalpy.gpu as g
 import numpy as np
+import editor
 
+active_editor = editor.Editor(None)
 #hello world
 def on_render(renderArgs : g.RenderArgs):
+    active_editor.render_ui(renderArgs.imgui)
     #todo: lets do this
     return
 
