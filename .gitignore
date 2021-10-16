@@ -2,3 +2,4 @@
 t2-output
 *.swp
 imgui.ini
+__pycache__
