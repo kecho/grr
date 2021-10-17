@@ -1,16 +1,18 @@
 import coalpy.gpu as g
-import default_scenes as scenes
 import sys
 import pathlib
-import os
-
-g_module_path = os.path.dirname(pathlib.Path(sys.modules[__name__].__file__)) + "\\"
+import pywavefront
+from . import gpugeo
+from . import default_scenes as scenes
+from . import get_module_path
 
 class Editor:
-    m_active_scene = None
 
-    def __init__(self, default_scene):
-        m_active_scene = default_scene
+    def __init__(self, geo : gpugeo.GpuGeo, default_scene : str):
+        self.m_active_scene_name = None
+        self.m_active_scene = None
+        self.m_geo = geo
+        self.m_active_scene = default_scene
         self.reload_scene()
 
     def render_menu_bar(self, imgui : g.ImguiBuilder):
@@ -21,10 +23,9 @@ class Editor:
                         menu_results = [(imgui.menu_item(nm), nm) for nm in scenes.data.keys()]
                         valid_results = [nm for (is_selected, nm) in menu_results if is_selected == True]
                         if valid_results:
-                            self.m_active_scene = g_module_path + scenes.data[valid_results[0]]
+                            self.m_active_scene_name = get_module_path() + scenes.data[valid_results[0]]
                             self.reload_scene()
                         imgui.end_menu()
-
                     imgui.end_menu()
                 imgui.end_menu()
             imgui.end_main_menu_bar()
@@ -33,7 +34,13 @@ class Editor:
         self.render_menu_bar(imgui)
 
     def reload_scene(self):
-        if self.m_active_scene == None:
+        if self.m_active_scene_name == None:
             return
-        print ("[Editor]: loading scene: "+'"'+self.m_active_scene+"'")
+        print ("[Editor]: loading scene: "+'"'+self.m_active_scene_name+"'")
+        try:
+            self.m_active_scene = pywavefront.Wavefront(file_name= self.m_active_scene_name, create_materials=True, collect_faces=True)        
+        except Exception as err:
+            print ("[Editor]: failed parsing scene, reason: " + str(err))
+
         
+ 
