@@ -28,8 +28,8 @@ class GpuGeo:
 
         self.m_index_buffer = g.Buffer(
             name = "global_index_buffer",
-            type = g.BufferType.Structured,
-            stride = GpuGeo.index_format_byte_size,
+            type = g.BufferType.Standard,
+            format = g.Format.R32_UINT,
             element_count = math.ceil(GpuGeo.index_pool_byte_size/GpuGeo.index_format_byte_size)
         )
 
