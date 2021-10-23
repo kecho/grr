@@ -30,7 +30,7 @@ def on_render(render_args : g.RenderArgs):
     return
 
 w = g.Window(
-    title="grr - gpu rasterizer and renderer for python. Kleber Garcia, 2021",
+    title="GRR - gpu rasterizer and renderer for python. Kleber Garcia, 2021",
     on_render = on_render,
     width = 720, height = 480)
 

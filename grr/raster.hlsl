@@ -25,9 +25,9 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
     geometry::Vertex b = g_verts[t.b];
     geometry::Vertex c = g_verts[t.c];
 
-    a.p.xy = mul(rotm,a.p.xy);
-    b.p.xy = mul(rotm,b.p.xy);
-    c.p.xy = mul(rotm,c.p.xy);
+    //a.p.xy = mul(rotm,a.p.xy);
+    //b.p.xy = mul(rotm,b.p.xy);
+    //c.p.xy = mul(rotm,c.p.xy);
 
     float2 ea = b.p.xy - a.p.xy;
     float2 eb = c.p.xy - b.p.xy;
@@ -43,5 +43,5 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
 
     float m = max(wa, max(wb, wc));
 
-    g_output[dispatchThreadId.xy] = m > 0 ? float4(0.0,0,0,0) : float4(0.3,0,0,1);
+    g_output[dispatchThreadId.xy] = m > 0.0 ? float4(0.0,0,0,0) : float4(0.3,0,0,1);
 }
