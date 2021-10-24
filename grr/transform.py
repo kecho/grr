@@ -145,3 +145,6 @@ def projection_matrix_from_aspect(fov, aspect, n, f):
     r = n*np.tan(0.5*fov);
     t = aspect * r;
     return projection_matrix(-r,r,t,-t,n,f)
+
+def to_radians():
+    return np.pi * 2.0 / 360.0
