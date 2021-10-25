@@ -52,5 +52,5 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
 
     float m = max(wa, max(wb, wc));
 
-    g_output[dispatchThreadId.xy] = m > 0.0 ? float4(0.0,0,0,0) : float4(0.3,0,0,1);
+    g_output[dispatchThreadId.xy] = m > 0.0 ? float4(0.0,0,0,0) : float4(1,0,0,1);
 }

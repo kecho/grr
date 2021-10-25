@@ -59,7 +59,12 @@ class Editor:
             return
 
         self.m_camera_panel = imgui.begin("Camera", self.m_camera_panel)
-        if imgui.collapsing_header("Transform"):
+        if (imgui.collapsing_header("params")):
+            self.m_editor_camera.fov = imgui.slider_float(label="fov", v=self.m_editor_camera.fov, v_min=0.01 * np.pi, v_max=0.7 * np.pi)
+            self.m_editor_camera.near = imgui.slider_float(label="near", v=self.m_editor_camera.near, v_min=0.001, v_max=8.0)
+            self.m_editor_camera.far = imgui.slider_float(label="far", v=self.m_editor_camera.far, v_min=10.0, v_max=90000)
+
+        if (imgui.collapsing_header("transform")):
             cam_transform = self.m_editor_camera.transform
             nx = cam_transform.translation[0]
             ny = cam_transform.translation[1]
