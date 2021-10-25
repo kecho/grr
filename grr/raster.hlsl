@@ -6,6 +6,8 @@ RWTexture2D<float4> g_output  : register(u0);
 
 cbuffer Constant : register(b0)
 {
+    float4x4 g_view;
+    float4x4 g_proj;
     float4 g_outputSize;
     float4 g_time;
 }

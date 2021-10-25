@@ -29,15 +29,15 @@ class Transform:
             
     @property
     def rotation(self):
-        return self.m_rotation
+        return self.m_rotation.copy()
 
     @property
     def translation(self):
-        return self.m_translation
+        return self.m_translation.copy()
 
     @property
     def scale(self):
-        return self.m_scale
+        return self.m_scale.copy()
 
     @property
     def right(self):

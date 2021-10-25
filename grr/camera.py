@@ -71,12 +71,12 @@ class Camera:
         self.m_transform.translation = value
 
     @w.setter
-    def fov(self, value):
+    def w(self, value):
         self.m_dirty_flags = Camera.s_DirtyProj
         self.m_w = value
 
     @h.setter
-    def fov(self, value):
+    def h(self, value):
         self.m_dirty_flags = Camera.s_DirtyProj
         self.m_h = value
 

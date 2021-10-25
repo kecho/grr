@@ -16,6 +16,7 @@ def on_render(render_args : g.RenderArgs):
     output_texture = render_args.window.display_texture
     w = render_args.width
     h = render_args.height
+    active_editor.update_camera(w, h, render_args.delta_time, render_args.window)
 
     utilities.clear_texture(
         cmd_list, [0.0, 0.0, 0.0, 0.0],
