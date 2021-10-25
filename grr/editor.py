@@ -1,4 +1,5 @@
 import coalpy.gpu as g
+import numpy as np
 import sys
 import pathlib
 import pywavefront
@@ -27,6 +28,7 @@ class Editor:
 
         #camera settings
         self.m_cam_move_speed = 0.1
+        self.m_cam_rotation_speed = 0.1
 
         self.reload_scene()
 
@@ -63,7 +65,7 @@ class Editor:
         #if (self.m_bottom_pressed):
         #    print("BOTTOM")
         prev_mouse = self.m_can_move_pressed
-        self.m_can_move_pressed = True 
+        self.m_can_move_pressed =  input_states.get_key_state(g.Keys.MouseRight)
         if prev_mouse == False and self.m_can_move_pressed:
             m = input_states.get_mouse_position()
             self.last_mouse = (m[2], m[3])
@@ -76,11 +78,25 @@ class Editor:
             cam_t = self.m_editor_camera.transform
             new_pos = self.m_editor_camera.pos
             zero = vec.float3(0, 0, 0)
-            new_pos = new_pos + ((cam_t.right * self.m_cam_move_speed) if self.m_right_pressed  else zero)
-            new_pos = new_pos - ((cam_t.right * self.m_cam_move_speed) if self.m_left_pressed   else zero)
+            new_pos = new_pos - ((cam_t.right * self.m_cam_move_speed) if self.m_right_pressed  else zero)
+            new_pos = new_pos + ((cam_t.right * self.m_cam_move_speed) if self.m_left_pressed   else zero)
             new_pos = new_pos + ((cam_t.front * self.m_cam_move_speed   ) if self.m_top_pressed    else zero)
             new_pos = new_pos - ((cam_t.front * self.m_cam_move_speed   ) if self.m_bottom_pressed else zero)
             self.m_editor_camera.pos = new_pos
+
+            curr_mouse = input_states.get_mouse_position()
+            rot_vec = delta_time * self.m_cam_rotation_speed * vec.float3(curr_mouse[2] - self.last_mouse[0], curr_mouse[3] - self.last_mouse[1], 0.0)
+
+            x_axis = vec.float3(1, 0, 0)
+            y_axis = vec.float3(0, 1, 0)
+
+            prev_q = self.m_editor_camera.transform.rotation
+            qx = vec.q_from_angle_axis(-np.sign(rot_vec[0]) * (np.abs(rot_vec[0]) ** 1.2), y_axis)
+            qy = vec.q_from_angle_axis(np.sign(rot_vec[1]) * (np.abs(rot_vec[1]) ** 1.2), x_axis)
+            self.m_editor_camera.transform.rotation = qy * (qx * prev_q)
+            self.m_editor_camera.transform.update_mats()
+            self.last_mouse = (curr_mouse[2], curr_mouse[3])
+            
 
     def render_ui(self, imgui : g.ImguiBuilder):
         self.render_menu_bar(imgui)

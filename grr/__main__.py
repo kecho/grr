@@ -23,7 +23,12 @@ def on_render(render_args : g.RenderArgs):
         output_texture, w, h)
 
     raster.rasterize(
-        cmd_list, geo, output_texture, w, h, render_args.render_time)
+        cmd_list,
+        render_args.render_time, w, h,
+        active_editor.camera.view_matrix,
+        active_editor.camera.proj_matrix,
+        geo,
+        output_texture)
 
     active_editor.render_ui(render_args.imgui)
     g.schedule([cmd_list])

@@ -27,6 +27,13 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
     geometry::Vertex b = g_verts[t.b];
     geometry::Vertex c = g_verts[t.c];
 
+    float4 ta = mul(mul(float4(a.p.xyz, 1.0), g_view), g_proj);
+    float4 tb = mul(mul(float4(b.p.xyz, 1.0), g_view), g_proj);
+    float4 tc = mul(mul(float4(c.p.xyz, 1.0), g_view), g_proj);
+    a.p = (ta / ta.w).xyz;
+    b.p = (tb / tb.w).xyz;
+    c.p = (tc / tc.w).xyz;
+
     //a.p.xy = mul(rotm,a.p.xy);
     //b.p.xy = mul(rotm,b.p.xy);
     //c.p.xy = mul(rotm,c.p.xy);
