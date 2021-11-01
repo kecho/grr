@@ -27,6 +27,10 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
     geometry::Vertex b = g_verts[t.b];
     geometry::Vertex c = g_verts[t.c];
 
+    a.p.xz = mul(a.p.xz, rotm);
+    b.p.xz = mul(b.p.xz, rotm);
+    c.p.xz = mul(c.p.xz, rotm);
+
     float4 ta = mul(mul(float4(a.p.xyz, 1.0), g_view), g_proj);
     float4 tb = mul(mul(float4(b.p.xyz, 1.0), g_view), g_proj);
     float4 tc = mul(mul(float4(c.p.xyz, 1.0), g_view), g_proj);
@@ -46,7 +50,13 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
     float wb = eb.x * pb.y - eb.y * pb.x;
     float wc = ec.x * pc.y - ec.y * pc.x;
 
+    float3 barys = geometry::computeBaryCoordPerspective(float3(a.p.xy,ta.w), float3(b.p.xy,tb.w), float3(c.p.xy,tc.w), hCoords);
+    float3 debugCol1 = float3(1,0,0) * barys.x;
+    float3 debugCol2 = float3(0,1,0) * barys.y;
+    float3 debugCol3 = float3(0,0,1) * barys.z;
+    float3 finalCol = barys.x > 0.5 ? float3(1,0,0) : (barys.y > 0.5 ? float3(0,1,0) : (barys.z > 0.5 ? float3(0,0,1) : (debugCol1 + debugCol2 + debugCol3)));
+
     float frontFace = -max(wa, max(wb, wc));
     float backFace = min(wa, min(wb, wc));
-    g_output[dispatchThreadId.xy] = (frontFace > 0.0) || (backFace > 0.0) ? float4(1.0,0,0,0) : float4(0,0,0,1);
+    g_output[dispatchThreadId.xy] = (frontFace > 0.0) || (backFace > 0.0) ? float4(finalCol,0) : float4(0,0,0,1);
 }
