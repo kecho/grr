@@ -34,10 +34,6 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
     b.p = (tb / tb.w).xyz;
     c.p = (tc / tc.w).xyz;
 
-    //a.p.xy = mul(rotm,a.p.xy);
-    //b.p.xy = mul(rotm,b.p.xy);
-    //c.p.xy = mul(rotm,c.p.xy);
-
     float2 ea = b.p.xy - a.p.xy;
     float2 eb = c.p.xy - b.p.xy;
     float2 ec = a.p.xy - c.p.xy;
@@ -50,7 +46,7 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
     float wb = eb.x * pb.y - eb.y * pb.x;
     float wc = ec.x * pc.y - ec.y * pc.x;
 
-    float m = max(wa, max(wb, wc));
-
-    g_output[dispatchThreadId.xy] = m > 0.0 ? float4(0.0,0,0,0) : float4(1,0,0,1);
+    float frontFace = -max(wa, max(wb, wc));
+    float backFace = min(wa, min(wb, wc));
+    g_output[dispatchThreadId.xy] = (frontFace > 0.0) || (backFace > 0.0) ? float4(1.0,0,0,0) : float4(0,0,0,1);
 }
