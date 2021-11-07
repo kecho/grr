@@ -1,5 +1,6 @@
 import coalpy.gpu as g
 import array
+import numpy as np
 import math
 
 class GpuGeo:
@@ -33,17 +34,23 @@ class GpuGeo:
             element_count = math.ceil(GpuGeo.index_pool_byte_size/GpuGeo.index_format_byte_size)
         )
 
+        self.triCounts = 0
+
     
     #simple testing function
     def create_simple_triangle(self):
         tri_data = array.array('f', [
-             #v.x,  v.y,  v.z,  uv.x, uv.y, n.x,  n.y,  n.z
-               1.0,  -0.5,  2.0,  0.0,  0.0,  0.0,  0.0,  1.0,
-              -1.0,  -0.5,  2.0,  1.0,  0.0,  0.0,  0.0,  1.0,
-               0.0,   1.0,  2.0,  0.5,  1.0,  0.0,  0.0,  1.0
+             #v.x,  v.y,  v.z,    # uv.x, uv.y, n.x,  n.y,  n.z
+               1.0,  -0.5,  2.0,  # 0.0,  0.0,  0.0,  0.0,  1.0,
+              -1.0,  -0.5,  2.0,  # 1.0,  0.0,  0.0,  0.0,  1.0,
+               0.0,   1.0,  2.0,  # 0.5,  1.0,  0.0,  0.0,  1.0
+             #v.x,  v.y,  v.z,    # uv.x, uv.y, n.x,  n.y,  n.z
+               1.0,  -0.5,  3.0,  # 0.0,  0.0,  0.0,  0.0,  1.0,
+              -1.0,  -0.5,  3.0,  # 1.0,  0.0,  0.0,  0.0,  1.0,
+               0.0,   1.0,  3.0,  # 0.5,  1.0,  0.0,  0.0,  1.0
         ])
 
-        index_data = [0, 1, 2]
+        index_data = [0, 1, 2, 3, 4, 5]
 
         c = g.CommandList()
         c.upload_resource(
@@ -56,7 +63,22 @@ class GpuGeo:
             destination = self.m_index_buffer
         )
 
-        g.schedule([c])
+        g.schedule(c)
+        self.triCounts = 2
+
+    def register_wavefront_obj(self, wavefront_obj):
+        self.triCounts = 0
+
+        try:
+            vertex_data = np.array(wavefront_obj.vertices, dtype='f')
+            index_data = np.array(wavefront_obj.mesh_list[0].faces, dtype='i')
+            c = g.CommandList()
+            c.upload_resource(source = vertex_data, destination = self.m_vertex_buffer)
+            c.upload_resource(source = index_data, destination = self.m_index_buffer)
+            g.schedule(c)
+            self.triCounts = len(wavefront_obj.mesh_list[0].faces) 
+        except Exception as err:
+            print("[gpugeo]: Failed uploading wavefront obj to GPU: " + str(err))
 
         
 

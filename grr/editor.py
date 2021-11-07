@@ -10,13 +10,14 @@ from . import camera as c
 from . import vec
 
 class Editor:
-
+    
     def __init__(self, geo : gpugeo.GpuGeo, default_scene : str):
         self.m_active_scene_name = None
         self.m_active_scene = None
         self.m_geo = geo
         self.m_active_scene = default_scene
         self.m_editor_camera = c.Camera(1920, 1080)
+        self.m_editor_camera.pos = vec.float3(0, 2, -14)
         self.m_frame_it = 0
 
         #input state
@@ -143,7 +144,8 @@ class Editor:
             return
         print ("[Editor]: loading scene: "+'"'+self.m_active_scene_name+"'")
         try:
-            self.m_active_scene = pywavefront.Wavefront(file_name= self.m_active_scene_name, create_materials=True, collect_faces=True)        
+            self.m_active_scene = pywavefront.Wavefront(file_name= self.m_active_scene_name, create_materials=True, collect_faces=True)
+            self.m_geo.register_wavefront_obj(self.m_active_scene)
         except Exception as err:
             print ("[Editor]: failed parsing scene, reason: " + str(err))
 

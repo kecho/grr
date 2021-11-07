@@ -6,9 +6,12 @@ from . import gpugeo
 from . import utilities
 from . import raster
 
+info = g.get_current_adapter_info()
+print("Current device: {}".format(info[1]))
+
 geo = gpugeo.GpuGeo()
 geo.create_simple_triangle()
-active_editor = editor.Editor(3, None)
+active_editor = editor.Editor(geo, None)
 
 #hello world
 def on_render(render_args : g.RenderArgs):

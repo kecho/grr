@@ -26,8 +26,8 @@ namespace geometry
     struct Vertex
     {
         float3 p;
-        float3 n;
-        float2 uv;
+        //float3 n;
+        //float2 uv;
     };
 
     struct TriangleI
