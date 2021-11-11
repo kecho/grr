@@ -17,7 +17,7 @@ class Editor:
         self.m_geo = geo
         self.m_active_scene = default_scene
         self.m_editor_camera = c.Camera(1920, 1080)
-        self.m_editor_camera.pos = vec.float3(0, 2, -14)
+        self.reset_camera()
         self.m_frame_it = 0
 
         #input state
@@ -26,6 +26,7 @@ class Editor:
         self.m_top_pressed = False
         self.m_bottom_pressed = False
         self.m_can_move_pressed = False
+        self.m_can_orbit_pressed = False
         self.m_last_mouse = (0.0, 0.0)
 
         #camera settings
@@ -36,6 +37,13 @@ class Editor:
         #ui panels states
         self.m_camera_panel = True
         self.reload_scene()
+
+    def reset_camera(self):
+        initial_pos = vec.float3(0, 0, -20)
+        self.m_editor_camera.pos = initial_pos
+        self.m_editor_camera.rotation = vec.q_from_angle_axis(0, vec.float3(1, 0, 0))
+        self.m_editor_camera.focus_distance = vec.veclen(initial_pos)
+        self.m_editor_camera.update_mats()
 
     def render_menu_bar(self, imgui : g.ImguiBuilder):
         if (imgui.begin_main_menu_bar()):
@@ -73,8 +81,7 @@ class Editor:
             (nx, ny, nz) = imgui.input_float3(label="pos", v=[nx, ny, nz])
             cam_transform.translation = [nx, ny, nz]
             if (imgui.button("reset")):
-                cam_transform.translation = [0, 0, 0]
-                cam_transform.rotation = vec.q_from_angle_axis(0, vec.float3(1, 0, 0))
+                self.reset_camera()
         imgui.end()
             
 
@@ -82,27 +89,26 @@ class Editor:
     def camera(self):
         return self.m_editor_camera
 
+    def _rotate_transform_mouse_control(self, target_transform, curr_mouse, delta_time):
+        rot_vec = delta_time * self.m_cam_rotation_speed * vec.float3(curr_mouse[2] - self.m_last_mouse[0], curr_mouse[3] - self.m_last_mouse[1], 0.0)
+        y_axis = vec.float3(0, 1, 0)
+        qx = vec.q_from_angle_axis(-np.sign(rot_vec[0]) * (np.abs(rot_vec[0]) ** 1.2), y_axis)
+        target_transform.rotation = (qx * target_transform.rotation)
+        
+        x_axis = target_transform.right
+        qy = vec.q_from_angle_axis(np.sign(rot_vec[1]) * (np.abs(rot_vec[1]) ** 1.2), x_axis)
+        target_transform.rotation = (qy * target_transform.rotation)
+
     def _update_inputs(self, input_states):
         self.m_right_pressed = input_states.get_key_state(g.Keys.D) 
         self.m_left_pressed = input_states.get_key_state(g.Keys.A)
         self.m_top_pressed = input_states.get_key_state(g.Keys.W)
         self.m_bottom_pressed = input_states.get_key_state(g.Keys.S)
-        #if (self.m_right_pressed):
-        #    print("RIGHT")
-        #if (self.m_left_pressed):
-        #    print("LEFT")
-        #if (self.m_top_pressed):
-        #    print("TOP")
-        #if (self.m_bottom_pressed):
-        #    print("BOTTOM")
-        #if (self.m_can_move_pressed):
-        #    print("MOUSE_DOWN")
-        #else:
-        #    print("MOUSE_UP")
-            
-        prev_mouse = self.m_can_move_pressed
+        prev_move_pressed = self.m_can_move_pressed
+        prev_orbit_pressed = self.m_can_orbit_pressed
         self.m_can_move_pressed =  input_states.get_key_state(g.Keys.MouseRight)
-        if prev_mouse != self.m_can_move_pressed:
+        self.m_can_orbit_pressed =  input_states.get_key_state(g.Keys.LeftAlt) and input_states.get_key_state(g.Keys.MouseLeft)
+        if prev_move_pressed != self.m_can_move_pressed or prev_orbit_pressed != self.m_can_orbit_pressed:
             m = input_states.get_mouse_position()
             self.m_last_mouse = (m[2], m[3])
 
@@ -112,26 +118,25 @@ class Editor:
         self.m_editor_camera.h = h
         self._update_inputs(input_states)
         if (self.m_can_move_pressed):
-            cam_t = self.m_editor_camera.transform
             new_pos = self.m_editor_camera.pos
             zero = vec.float3(0, 0, 0)
-            new_pos = new_pos - ((cam_t.right * self.m_cam_move_speed) if self.m_right_pressed  else zero)
-            new_pos = new_pos + ((cam_t.right * self.m_cam_move_speed) if self.m_left_pressed   else zero)
-            new_pos = new_pos + ((cam_t.front * self.m_cam_move_speed   ) if self.m_top_pressed    else zero)
-            new_pos = new_pos - ((cam_t.front * self.m_cam_move_speed   ) if self.m_bottom_pressed else zero)
+            cam_transform = self.m_editor_camera.transform
+            new_pos = new_pos - ((cam_transform.right * self.m_cam_move_speed) if self.m_right_pressed  else zero)
+            new_pos = new_pos + ((cam_transform.right * self.m_cam_move_speed) if self.m_left_pressed   else zero)
+            new_pos = new_pos + ((cam_transform.front * self.m_cam_move_speed   ) if self.m_top_pressed    else zero)
+            new_pos = new_pos - ((cam_transform.front * self.m_cam_move_speed   ) if self.m_bottom_pressed else zero)
             self.m_editor_camera.pos = new_pos
-
             curr_mouse = input_states.get_mouse_position()
-            rot_vec = delta_time * self.m_cam_rotation_speed * vec.float3(curr_mouse[2] - self.m_last_mouse[0], curr_mouse[3] - self.m_last_mouse[1], 0.0)
-
-            x_axis = self.m_editor_camera.transform.right
-            y_axis = vec.float3(0, 1, 0)
-
-            prev_q = self.m_editor_camera.transform.rotation
-            qx = vec.q_from_angle_axis(-np.sign(rot_vec[0]) * (np.abs(rot_vec[0]) ** 1.2), y_axis)
-            qy = vec.q_from_angle_axis(np.sign(rot_vec[1]) * (np.abs(rot_vec[1]) ** 1.2), x_axis)
-            self.m_editor_camera.transform.rotation = qy * (qx * prev_q)
-            self.m_editor_camera.transform.update_mats()
+            self._rotate_transform_mouse_control(cam_transform, curr_mouse, delta_time)
+            self.m_last_mouse = (curr_mouse[2], curr_mouse[3])
+        elif (self.m_can_orbit_pressed):
+            lookat_pos = self.m_editor_camera.focus_point
+            lookat_dist = self.m_editor_camera.focus_distance
+            cam_transform = self.m_editor_camera.transform
+            curr_mouse = input_states.get_mouse_position()
+            self._rotate_transform_mouse_control(cam_transform, curr_mouse, delta_time)
+            cam_transform.translation = lookat_pos - lookat_dist * cam_transform.front
+            cam_transform.update_mats()
             self.m_last_mouse = (curr_mouse[2], curr_mouse[3])
             
 

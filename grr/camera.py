@@ -12,6 +12,7 @@ class Camera:
         self.m_h = h
         self.m_near = 0.1
         self.m_far = 10000
+        self.m_focus_distance = 1.0
         self.m_transform = t.Transform()
         self.m_proj_matrix = t.Transform.Identity()
         self.m_proj_inv_matrix = t.Transform.Identity()
@@ -26,6 +27,14 @@ class Camera:
     @property
     def pos(self):
         return self.m_transform.translation
+
+    @property
+    def focus_distance(self):
+        return self.m_focus_distance
+
+    @property
+    def focus_point(self):
+        return self.pos + self.m_focus_distance * self.m_transform.front
 
     @property
     def fov(self):
@@ -70,6 +79,10 @@ class Camera:
     def pos(self, value):
         self.m_transform.translation = value
 
+    @pos.setter
+    def rotation(self, value):
+        self.m_transform.rotation = value
+
     @w.setter
     def w(self, value):
         self.m_dirty_flags = Camera.s_DirtyProj
@@ -89,6 +102,10 @@ class Camera:
     def far(self, value):
         self.m_dirty_flags = Camera.s_DirtyProj
         self.m_far = value
+
+    @focus_distance.setter
+    def focus_distance(self, value):
+        self.m_focus_distance = value
 
     def update_mats(self):
         if ((self.m_dirty_flags & Camera.s_DirtyProj) != 0):
