@@ -1,4 +1,5 @@
 #include "geometry.hlsl"
+#include "raster_util.hlsl"
 
 StructuredBuffer<geometry::Vertex> g_verts : register(t0);
 Buffer<int> g_indices : register(t1);
@@ -13,7 +14,7 @@ cbuffer Constant : register(b0)
 }
 
 [numthreads(8,8,1)]
-void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
+void csMainRasterBruteForce(int3 dispatchThreadId : SV_DispatchThreadID)
 {
     float2 uv = (dispatchThreadId.xy + 0.5) * g_outputSize.zw;
     float2 hCoords = uv * float2(2.0,2.0) - float2(1.0, 1.0);
@@ -26,8 +27,7 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
 
     //hack, clear target
     float4 color = float4(0,0,0,0);
-    if (triOffset != 0)
-        color = g_output[dispatchThreadId.xy];
+    bool writeColor = false;
     for (int triId = 0; triId < triCounts; ++triId)
     {
         geometry::TriangleI ti;
@@ -47,7 +47,23 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID)
         
         float3 finalCol = interpResult.eval(float3(1,0,0), float3(0,1,0), float3(0,0,1));
         if (interpResult.visible)
+        {
+            writeColor = true;
             color.xyz = finalCol;
+        }
+        
     }
-    g_output[dispatchThreadId.xy] = color;//interpResult.visible ? float4(finalCol, 1) : float4(0,0,0,1);
+    if (writeColor)
+        g_output[dispatchThreadId.xy] = color;//interpResult.visible ? float4(finalCol, 1) : float4(0,0,0,1);
 }
+
+StructuredBuffer<geometry::Vertex> g_binInputVerts : register(t0);
+Buffer<int> g_binInputIndices : register(t1);
+RWStructuredBuffer<raster::BinIntersectionRecord> g_binOutputRecords : register(u0);
+RWBuffer<int> g_binCounter : register(u1);
+
+[numthreads(64, 1, 1)]
+void csMainBinTriangles(int3 dispatchThreadId : SV_DispatchThreadID)
+{
+}
+

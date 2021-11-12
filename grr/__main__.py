@@ -5,15 +5,18 @@ from . import editor
 from . import gpugeo
 from . import utilities
 from . import raster
+from . import debug
 
 info = g.get_current_adapter_info()
 print("Current device: {}".format(info[1]))
 
+initial_w = 720
+initial_h = 480
 geo = gpugeo.GpuGeo()
 geo.create_simple_triangle()
+rasterizer = raster.Rasterizer(initial_w, initial_h)
 active_editor = editor.Editor(geo, None)
 
-#hello world
 def on_render(render_args : g.RenderArgs):
     cmd_list = g.CommandList()
     output_texture = render_args.window.display_texture
@@ -21,20 +24,26 @@ def on_render(render_args : g.RenderArgs):
     h = render_args.height
     active_editor.update_camera(w, h, render_args.delta_time, render_args.window)
 
+    rasterizer.update_view(w, h)
+
     utilities.clear_texture(
         cmd_list, [0.0, 0.0, 0.0, 0.0],
-        output_texture, w, h)
+        rasterizer.visibility_buffer, w, h)
 
-    raster.rasterize(
+    rasterizer.rasterize_brute_force(
         cmd_list,
         render_args.render_time, w, h,
         active_editor.camera.view_matrix,
         active_editor.camera.proj_matrix,
-        geo,
-        output_texture)
+        geo)
+
+    debug.debug_visibility_buffer(
+        cmd_list,
+        rasterizer.visibility_buffer, output_texture, w, h)
 
     active_editor.render_ui(render_args.imgui)
-    g.schedule([cmd_list])
+    g.schedule(cmd_list)
+
 
     return
 
