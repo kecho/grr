@@ -4,6 +4,7 @@
 namespace raster
 {
 
+    //Size must match raster.py
     struct BinIntersectionRecord
     {
         int triangleId;

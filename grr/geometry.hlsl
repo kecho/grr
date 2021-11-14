@@ -70,6 +70,12 @@ namespace geometry
         }
     };
 
+    struct TriangleAABB
+    {
+        float3 begin;
+        float3 end;
+    };
+
     struct TriangleH
     {
         float4 h0;
@@ -112,6 +118,14 @@ namespace geometry
             result.bari = computeBaryCoordPerspective(float3(p0.xy,h0.w), float3(p1.xy,h1.w), float3(p2.xy,h2.w), hCoords);
             result.visible = (frontFace > 0.0) || (backFace > 0.0);
             return result;
+        }
+
+        TriangleAABB aabb()
+        {
+            TriangleAABB val;
+            val.begin = min(p0, min(p1, p2));
+            val.end = max(p0, max(p1, p2));
+            return val;
         }
     };
 

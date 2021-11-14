@@ -30,6 +30,12 @@ def on_render(render_args : g.RenderArgs):
         cmd_list, [0.0, 0.0, 0.0, 0.0],
         rasterizer.visibility_buffer, w, h)
 
+    rasterizer.bin_tri_records(
+        cmd_list, w, h, 
+        active_editor.camera.view_matrix,
+        active_editor.camera.proj_matrix,
+        geo)
+
     rasterizer.rasterize_brute_force(
         cmd_list,
         render_args.render_time, w, h,
@@ -39,12 +45,10 @@ def on_render(render_args : g.RenderArgs):
 
     debug.debug_visibility_buffer(
         cmd_list,
-        rasterizer.visibility_buffer, output_texture, w, h)
+        rasterizer, output_texture, w, h)
 
     active_editor.render_ui(render_args.imgui)
     g.schedule(cmd_list)
-
-
     return
 
 w = g.Window(

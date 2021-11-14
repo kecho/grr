@@ -1,8 +1,10 @@
 #include "geometry.hlsl"
 #include "raster_util.hlsl"
 
+//Shared inputs
 StructuredBuffer<geometry::Vertex> g_verts : register(t0);
 Buffer<int> g_indices : register(t1);
+
 RWTexture2D<float4> g_output  : register(u0);
 
 cbuffer Constant : register(b0)
@@ -57,13 +59,52 @@ void csMainRasterBruteForce(int3 dispatchThreadId : SV_DispatchThreadID)
         g_output[dispatchThreadId.xy] = color;//interpResult.visible ? float4(finalCol, 1) : float4(0,0,0,1);
 }
 
-StructuredBuffer<geometry::Vertex> g_binInputVerts : register(t0);
-Buffer<int> g_binInputIndices : register(t1);
-RWStructuredBuffer<raster::BinIntersectionRecord> g_binOutputRecords : register(u0);
-RWBuffer<int> g_binCounter : register(u1);
+RWBuffer<uint> g_totalBins : register(u0);
+RWBuffer<uint> g_binCounters : register(u1);
+RWStructuredBuffer<raster::BinIntersectionRecord> g_binOutputRecords : register(u2);
+
+cbuffer ConstantBins : register(b0)
+{
+    float4 g_binFrameDims;
+    float g_binTileX;
+    float g_binTileY;
+    float g_binCoarseTileSize;
+    int g_binTriCounts;
+    float4x4 g_binView;
+    float4x4 g_binProj;
+}
 
 [numthreads(64, 1, 1)]
-void csMainBinTriangles(int3 dispatchThreadId : SV_DispatchThreadID)
+void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
 {
+    if (dti.x >= g_binTriCounts)
+        return;
+
+    int triId = dti.x;
+
+    geometry::TriangleI ti;
+    ti.load(g_indices, triId);
+
+    geometry::TriangleV tv;
+    tv.load(g_verts, ti);
+
+    geometry::TriangleH th;
+    th.init(tv, g_binView, g_binProj);
+
+    geometry::TriangleAABB aabb = th.aabb();
+
+    int2 beginTiles = ((aabb.begin.xy * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
+    int2 endTiles =   ((aabb.end.xy   * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
+
+    //go for each tile in this tri
+    for (int tileX = beginTiles.x; tileX <= endTiles.x; ++tileX)
+    {
+        for (int tileY = beginTiles.y; tileY <= endTiles.y; ++tileY)
+        {
+            int binId = (tileY * g_binTileX + tileX);
+            uint unused = 0;
+            InterlockedAdd(g_binCounters[binId], 1, unused);
+        }
+    }
 }
 
