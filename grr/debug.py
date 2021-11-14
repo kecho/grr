@@ -3,7 +3,7 @@ import math
 from . import raster
 
 ## TODO: samplers are busted, must fix.
-#g_font_sampler = g.Sampler(filter_type = g.FilterType.Linear, max_lod = 1)
+g_font_sampler = g.Sampler(filter_type = g.FilterType.Linear)
 g_debug_vis_shader = g.Shader(file = "debug_cs.hlsl", name = "debug_visibility", main_function = "csMainDebugVis")
 g_debug_font_texture = g.Texture(file = "data/debug_font.jpg")
 
@@ -25,7 +25,7 @@ def debug_visibility_buffer(cmd_list, rasterizer, output_texture, w, h):
             rasterizer.m_coarse_bin_tiles_counter_buffer,
             rasterizer.m_bin_record_buffer],
 
-        #samplers = g_font_sampler,
+        samplers = g_font_sampler,
 
         outputs = output_texture,
         x = math.ceil(w / 8),

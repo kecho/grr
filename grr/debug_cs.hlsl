@@ -19,15 +19,26 @@ cbuffer Constants : register(b0)
     int   g_unused;
 }
 
-float4 drawFont(float2 uv, int2 coord, float fontPixelSize)
+#define NUM_DIGITS 2.0
+
+float4 drawNumber(float2 uv, float fontPixelSize, int number)
 {
-    return float4(uv.xxx,1);
+    int currDigit = NUM_DIGITS - (int)round(uv.x / NUM_DIGITS) - 1.0;
+    number /= pow(10, currDigit );
+    uv = fmod(uv, float2(1.0,1.0));
+    
+    float row = 3.0/16.0;
+    float col = float(number % 10)/16.0;
+    float2 samplePos = float2(col + uv.x * 1.0/16.0, row + uv.y * 1.0/16.0);
+    float4 val = g_debugFont.SampleLevel(g_fontSampler, samplePos, 0.0);
+    return val.xxxx;
 }
 
 float4 drawTile(int2 coord, int tileSize, int tileCount)
 {
     float borderThickness = 0.02;
-    float fontSquare = 0.3;
+    float fontSquare = 14.0/64.0;
+    float2 fontBlock = float2(fontSquare * NUM_DIGITS, fontSquare);
     float4 borderColor = float4(0.02, 0.03, 0.4, 1.0);
     float4 tileColor = float4(0, 0, 1.0, 0.3);
 
@@ -38,11 +49,12 @@ float4 drawTile(int2 coord, int tileSize, int tileCount)
     if (isBorder)
         return borderColor;
     
-    bool isFont = all(tileUv < fontSquare);
+    bool isFont = all(tileUv < fontBlock);
     if (isFont)
     {
         float fontBoxSize =  fontSquare * float(tileSize);
-        return drawFont(tileUv / fontBoxSize, tileCoord, fontBoxSize);
+        float4 fontCol = drawNumber(tileUv / fontSquare, fontBoxSize, tileCount);
+        tileColor.rgba = lerp(tileColor.rgba, fontCol.rgba, fontCol.a);
     }
 
     return tileColor;
