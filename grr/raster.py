@@ -95,6 +95,9 @@ class Rasterizer:
             offset = offset + batch_count
             count_left = count_left - batch_count
             counts = counts + 1
+            #hack: avoid gpu hangs by over saturating the work queue
+            if counts >= 20:
+                break
 
     def clear_counter_buffers(self, cmd_list, w, h):
         tiles_w = math.ceil(w / Rasterizer.coarse_tile_size)

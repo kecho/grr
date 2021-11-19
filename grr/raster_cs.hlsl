@@ -96,6 +96,9 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     int2 beginTiles = ((aabb.begin.xy * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
     int2 endTiles =   ((aabb.end.xy   * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
 
+    beginTiles = clamp(beginTiles, int2(0,0), int2(g_binTileX, g_binTileY) - 1);
+    endTiles = clamp(endTiles, int2(0,0), int2(g_binTileX, g_binTileY) - 1);
+
     //go for each tile in this tri
     for (int tileX = beginTiles.x; tileX <= endTiles.x; ++tileX)
     {
