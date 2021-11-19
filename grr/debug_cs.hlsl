@@ -19,13 +19,24 @@ cbuffer Constants : register(b0)
     int   g_unused;
 }
 
-#define NUM_DIGITS 2.0
-
-float4 drawNumber(float2 uv, float fontPixelSize, int number)
+float4 drawNumber(float2 uv, int digitsCount, int number)
 {
-    int currDigit = NUM_DIGITS - (int)round(uv.x / NUM_DIGITS) - 1.0;
-    number /= pow(10, currDigit );
-    uv = fmod(uv, float2(1.0,1.0));
+    int leadingZeros = 0;
+    int leadingZN = number;
+    while (leadingZN != 0)
+    {
+        ++leadingZeros;
+        leadingZN /= 10;
+    }
+    leadingZN = digitsCount - leadingZeros;
+    uv.x += (float)leadingZN/(float)digitsCount;
+    if (uv.x > 1.0)
+        return float4(0,0,0,0);
+
+    int currDigit = clamp(digitsCount - (int)(uv.x * digitsCount) - 1.0, 0, digitsCount - 1);
+
+    number /= pow(10, currDigit);
+    uv.x = fmod(uv.x * digitsCount, 1.0);
     
     float row = 3.0/16.0;
     float col = float(number % 10)/16.0;
@@ -37,8 +48,9 @@ float4 drawNumber(float2 uv, float fontPixelSize, int number)
 float4 drawTile(int2 coord, int tileSize, int tileCount)
 {
     float borderThickness = 0.02;
-    float fontSquare = 14.0/64.0;
-    float2 fontBlock = float2(fontSquare * NUM_DIGITS, fontSquare);
+    const int numberOfDigits = 3;
+    float fontSquare = 16.0/64.0;
+    float2 fontBlock = float2(fontSquare * numberOfDigits, fontSquare);
     float4 borderColor = float4(0.02, 0.03, 0.4, 1.0);
     float4 tileColor = float4(0, 0, 1.0, 0.3);
 
@@ -52,8 +64,7 @@ float4 drawTile(int2 coord, int tileSize, int tileCount)
     bool isFont = all(tileUv < fontBlock);
     if (isFont)
     {
-        float fontBoxSize =  fontSquare * float(tileSize);
-        float4 fontCol = drawNumber(tileUv / fontSquare, fontBoxSize, tileCount);
+        float4 fontCol = drawNumber(tileUv / fontBlock, numberOfDigits, tileCount);
         tileColor.rgba = lerp(tileColor.rgba, fontCol.rgba, fontCol.a);
     }
 
