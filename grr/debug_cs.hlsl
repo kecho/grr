@@ -48,7 +48,7 @@ float4 drawNumber(float2 uv, int digitsCount, int number)
 float4 drawTile(int2 coord, int tileSize, int tileCount)
 {
     float borderThickness = 0.02;
-    const int numberOfDigits = 3;
+    const int numberOfDigits = 4;
     float fontSquare = 16.0/64.0;
     float2 fontBlock = float2(fontSquare * numberOfDigits, fontSquare);
     float4 borderColor = float4(0.02, 0.03, 0.4, 1.0);

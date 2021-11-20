@@ -21,11 +21,8 @@ void csMainRasterBruteForce(int3 dispatchThreadId : SV_DispatchThreadID)
     float2 uv = (dispatchThreadId.xy + 0.5) * g_outputSize.zw;
     float2 hCoords = uv * float2(2.0,2.0) - float2(1.0, 1.0);
 
-    float rot = g_timeOffsetCount.x * 0.001;
     int triOffset = g_timeOffsetCount.y;
     int triCounts = g_timeOffsetCount.z;
-    float2 sc = float2(sin(rot), cos(rot));
-    float2x2 rotm = float2x2(sc.x, sc.y, -sc.y, sc.x);
 
     //hack, clear target
     float4 color = float4(0,0,0,0);
@@ -38,10 +35,6 @@ void csMainRasterBruteForce(int3 dispatchThreadId : SV_DispatchThreadID)
         geometry::TriangleV tv;
         tv.load(g_verts, ti);
 
-        //tv.a.p.xz = mul(tv.a.p.xz, rotm);
-        //tv.b.p.xz = mul(tv.b.p.xz, rotm);
-        //tv.c.p.xz = mul(tv.c.p.xz, rotm);
-
         geometry::TriangleH th;
         th.init(tv, g_view, g_proj);
 
@@ -53,7 +46,6 @@ void csMainRasterBruteForce(int3 dispatchThreadId : SV_DispatchThreadID)
             writeColor = true;
             color.xyz = finalCol;
         }
-        
     }
     if (writeColor)
         g_output[dispatchThreadId.xy] = color;//interpResult.visible ? float4(finalCol, 1) : float4(0,0,0,1);
@@ -91,7 +83,7 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     geometry::TriangleH th;
     th.init(tv, g_binView, g_binProj);
 
-    geometry::TriangleAABB aabb = th.aabb();
+    geometry::AABB aabb = th.aabb();
 
     int2 beginTiles = ((aabb.begin.xy * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
     int2 endTiles =   ((aabb.end.xy   * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
@@ -99,11 +91,24 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     beginTiles = clamp(beginTiles, int2(0,0), int2(g_binTileX, g_binTileY) - 1);
     endTiles = clamp(endTiles, int2(0,0), int2(g_binTileX, g_binTileY) - 1);
 
+    float2 tileDims = float2(g_binCoarseTileSize.xx / g_binFrameDims.xy) * 2.0;
+
     //go for each tile in this tri
     for (int tileX = beginTiles.x; tileX <= endTiles.x; ++tileX)
     {
         for (int tileY = beginTiles.y; tileY <= endTiles.y; ++tileY)
         {
+            float2 tileB = float2(tileX, tileY);
+            float2 tileE = tileB + 1.0;
+            geometry::AABB tile;
+
+            //TODO: fix Z and y axis winding, its a bit of a shitshow, for now hack tile begin/end z to 0 to 1.01
+            tile.begin = float3(tileB * tileDims - 1.0f.xx, 0.0);
+            tile.end =   float3(tileE * tileDims - 1.0f.xx, 1.01);
+            
+            if (!geometry::intersectsSAT(th, tile))
+                continue;
+
             int binId = (tileY * g_binTileX + tileX);
             uint unused = 0;
             InterlockedAdd(g_binCounters[binId], 1, unused);
