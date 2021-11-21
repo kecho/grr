@@ -21,6 +21,8 @@ cbuffer Constants : register(b0)
 
 float4 drawNumber(float2 uv, int digitsCount, int number)
 {
+    if (any(uv < 0.0) || any(uv > 1.0))
+        return float4(0,0,0,0);
     int leadingZeros = 0;
     int leadingZN = number;
     while (leadingZN != 0)
@@ -56,15 +58,19 @@ float4 drawTile(int2 coord, int tileSize, int tileCount)
 
     int2 tileCoord = int2(coord.x % tileSize, coord.y % tileSize);
     float2 tileUv = (tileCoord + 0.5) / (float)tileSize;
+    tileUv.y = 1.0 - tileUv.y;
     float2 borderUvs = abs(tileUv * 2.0 - 1.0) - (1.0 - borderThickness);
     bool isBorder = any(borderUvs > 0.0);
     if (isBorder)
         return borderColor;
     
-    bool isFont = all(tileUv < fontBlock);
+    float2 fontTileUv = tileUv - 5.0/64;
+    bool isFont = all(fontTileUv < fontBlock);
     if (isFont)
     {
-        float4 fontCol = drawNumber(tileUv / fontBlock, numberOfDigits, tileCount);
+        float4 fontCol = drawNumber(fontTileUv / fontBlock, numberOfDigits, tileCount);
+        float4 fontColShadow = drawNumber((fontTileUv - 2.0/64) / fontBlock, numberOfDigits, tileCount);
+        tileColor.rgba = lerp(tileColor.rgba, float4(0,0,0,1), fontColShadow.a);
         tileColor.rgba = lerp(tileColor.rgba, fontCol.rgba, fontCol.a);
     }
 
@@ -74,12 +80,14 @@ float4 drawTile(int2 coord, int tileSize, int tileCount)
 [numthreads(8,8,1)]
 void csMainDebugVis(int3 dti : SV_DispatchThreadID)
 {
-    int tileX = dti.x / g_binCoarseTileSize;
-    int tileY = dti.y / g_binCoarseTileSize;
+    float2 uv = (float2)(dti.xy) / (float2)g_dims.xy;
+    uv.y = 1.0 - uv.y;
+    int tileX = int(uv.x * g_dims.x) / g_binCoarseTileSize;
+    int tileY = int(uv.y * g_dims.y) / g_binCoarseTileSize;
     int tileId = tileY * g_binTileX + tileX;
     uint count = g_binCounters[tileId];
 
-    float4 tileColor = drawTile(dti.xy, g_binCoarseTileSize, count);
+    float4 tileColor = drawTile(uv * g_dims.xy, g_binCoarseTileSize, count);
     float4 debugBinCol = count != 0 ? tileColor : float4(0,0,0,0);
 
     float3 finalColor = lerp(g_visibilityBuffer[dti.xy].xyz, debugBinCol.xyz, debugBinCol.a);

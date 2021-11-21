@@ -14,6 +14,7 @@ class Camera:
         self.m_far = 10000
         self.m_focus_distance = 1.0
         self.m_transform = t.Transform()
+        self.m_transform.scale = [1,1,-1]
         self.m_proj_matrix = t.Transform.Identity()
         self.m_proj_inv_matrix = t.Transform.Identity()
         self.m_dirty_flags = Camera.s_DirtyProj

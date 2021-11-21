@@ -19,6 +19,8 @@ cbuffer Constant : register(b0)
 void csMainRasterBruteForce(int3 dispatchThreadId : SV_DispatchThreadID)
 {
     float2 uv = (dispatchThreadId.xy + 0.5) * g_outputSize.zw;
+    uv.y = 1.0 - uv.y;
+
     float2 hCoords = uv * float2(2.0,2.0) - float2(1.0, 1.0);
 
     int triOffset = g_timeOffsetCount.y;
@@ -102,9 +104,8 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             float2 tileE = tileB + 1.0;
             geometry::AABB tile;
 
-            //TODO: fix Z and y axis winding, its a bit of a shitshow, for now hack tile begin/end z to 0 to 1.01
             tile.begin = float3(tileB * tileDims - 1.0f.xx, 0.0);
-            tile.end =   float3(tileE * tileDims - 1.0f.xx, 1.01);
+            tile.end =   float3(tileE * tileDims - 1.0f.xx, 1.0);
             
             if (!geometry::intersectsSAT(th, tile))
                 continue;
