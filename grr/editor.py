@@ -121,8 +121,8 @@ class Editor:
             new_pos = self.m_editor_camera.pos
             zero = vec.float3(0, 0, 0)
             cam_transform = self.m_editor_camera.transform
-            new_pos = new_pos - ((cam_transform.right * self.m_cam_move_speed) if self.m_right_pressed  else zero)
-            new_pos = new_pos + ((cam_transform.right * self.m_cam_move_speed) if self.m_left_pressed   else zero)
+            new_pos = new_pos + ((cam_transform.right * self.m_cam_move_speed) if self.m_right_pressed  else zero)
+            new_pos = new_pos - ((cam_transform.right * self.m_cam_move_speed) if self.m_left_pressed   else zero)
             new_pos = new_pos + ((cam_transform.front * self.m_cam_move_speed   ) if self.m_top_pressed    else zero)
             new_pos = new_pos - ((cam_transform.front * self.m_cam_move_speed   ) if self.m_bottom_pressed else zero)
             self.m_editor_camera.pos = new_pos
