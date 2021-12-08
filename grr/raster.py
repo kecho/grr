@@ -68,23 +68,20 @@ class Rasterizer:
         count_left = gpugeo.triCounts
         offset = 0
         counts = 0
+        const = []
+        const.extend(view_matrix.flatten().tolist())
+        const.extend(proj_matrix.flatten().tolist())
         while offset < gpugeo.triCounts:
+            
             batch_count = min(count_left, batch_size)
+            batch_const = const
+            batch_const.extend([
+                w, h, 1.0/w, 1.0/h,
+                t, float(offset), float(batch_count), 0.0
+            ])
             cmd_list.dispatch(
                 shader = g_brute_force_shader,
-                constants = np.array([
-                    view_matrix[0, 0:4],
-                    view_matrix[1, 0:4],
-                    view_matrix[2, 0:4],
-                    view_matrix[3, 0:4],
-                    proj_matrix[0, 0:4],
-                    proj_matrix[1, 0:4],
-                    proj_matrix[2, 0:4],
-                    proj_matrix[3, 0:4],
-                    [w, h, 1.0/w, 1.0/h],
-                    [t, float(offset), float(batch_count), 0.0]
-                ], dtype='f'),
-
+                constants = batch_const,
                 inputs = [gpugeo.m_vertex_buffer, gpugeo.m_index_buffer],
                 outputs =  self.m_visibility_buffer,
 
