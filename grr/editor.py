@@ -1,8 +1,10 @@
 import coalpy.gpu as g
 import numpy as np
+import os.path
 import sys
 import pathlib
 import pywavefront
+import json
 from . import gpugeo
 from . import default_scenes as scenes
 from . import get_module_path
@@ -37,6 +39,31 @@ class Editor:
         #ui panels states
         self.m_camera_panel = True
         self.reload_scene()
+
+    def save_editor_state(self):
+        state = {
+            'cam_panel' : self.m_camera_panel
+        }
+        try:
+            f = open('editor_state.json', "w")
+            f.write(json.dumps(state))
+            f.close()
+        except Exception as err:
+            print("[Editor]: error saving state"+str(err))
+
+    def load_editor_state(self):
+        try:
+            if not os.path.exists('editor_state.json'):
+                return
+
+            f = open('editor_state.json', "r")
+
+            state = json.loads(f.read())
+            if 'cam_panel' in state:
+                self.m_camera_panel = state['cam_panel']
+            f.close()
+        except Exception as err:
+            print("[Editor]: error loading state"+str(err))
 
     def reset_camera(self):
         initial_pos = vec.float3(0, 0, -20)

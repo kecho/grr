@@ -16,6 +16,7 @@ geo = gpugeo.GpuGeo()
 geo.create_simple_triangle()
 rasterizer = raster.Rasterizer(initial_w, initial_h)
 active_editor = editor.Editor(geo, None)
+active_editor.load_editor_state()
 
 def on_render(render_args : g.RenderArgs):
     cmd_list = g.CommandList()
@@ -60,3 +61,4 @@ w = g.Window(
     width = 720, height = 480)
 
 g.run()
+active_editor.save_editor_state()
