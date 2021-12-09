@@ -2,8 +2,8 @@ import coalpy.gpu as g
 import math
 from . import get_module_path
 
-g_clear_target_shader = g.Shader(file = "clear_target.hlsl", name = "clear", main_function = "main_clear" )
-g_clear_uint_buffer_shader = g.Shader(file = "clear_target.hlsl", name = "clear", main_function = "main_clear_uint_buffer" )
+g_clear_target_shader = g.Shader(file = "clear_target_cs.hlsl", name = "clear", main_function = "csMainClear" )
+g_clear_uint_buffer_shader = g.Shader(file = "clear_target_cs.hlsl", name = "clear", main_function = "csMainClearUintBuffer" )
 
 def clear_texture(cmd_list, color, texture, w, h):
     cmd_list.dispatch(

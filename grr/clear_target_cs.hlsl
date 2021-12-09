@@ -7,7 +7,7 @@ cbuffer Constants : register(b0)
 }
 
 [numthreads(8,8,1)]
-void main_clear(int2 dti : SV_DispatchThreadID)
+void csMainClear(int2 dti : SV_DispatchThreadID)
 {
     g_output[dti] = clearColor;
 }
@@ -21,7 +21,7 @@ cbuffer ConstantsUintBuff : register(b0)
 
 RWBuffer<uint> g_output_buff_uint : register(u0);
 [numthreads(64,1,1)]
-void main_clear_uint_buffer(int3 dti : SV_DispatchThreadID)
+void csMainClearUintBuffer(int3 dti : SV_DispatchThreadID)
 {
     if (dti.x >= g_clearValSize)
         return;
