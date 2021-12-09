@@ -16,7 +16,7 @@ def prefix_sum(input_data):
         
 
 def test_cluster_gen():
-    input_data = np.array([1,2,3,4,5,6], dtype='i')
+    input_data = np.array(range(0, 64, 1), dtype='i')
     input_buffer = g.Buffer(name="input_test", type = g.BufferType.Standard, format = g.Format.R32_UINT, element_count = len(input_data))
     output_buffer = g.Buffer(name="output_test", type = g.BufferType.Standard, format = g.Format.R32_UINT, element_count = len(input_data))
 

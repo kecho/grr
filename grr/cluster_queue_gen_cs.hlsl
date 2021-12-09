@@ -20,7 +20,7 @@ void csMainPrefixSumGroup(int3 dispatchThreadID : SV_DispatchThreadID, int group
     GroupMemoryBarrierWithGroupSync();
     
     //Hillis Steele Scan
-    for (int i = 1; i < (GROUP_SIZE >> 1); i <<= 1)
+    for (int i = 1; i < GROUP_SIZE; i <<= 1)
     {
         uint val = threadID >= i ? gs_prefixCache[threadID - i] : 0u;
         GroupMemoryBarrierWithGroupSync();
