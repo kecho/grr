@@ -1,3 +1,5 @@
+
+// This value must match the group size in prefux_sum.py
 #define GROUP_SIZE 128
 
 Buffer<uint> g_inputBuffer : register(t0);
@@ -48,10 +50,11 @@ groupshared uint g_parentSum;
 [numthreads(GROUP_SIZE, 1, 1)]
 void csPrefixSumResolveParent(int3 dispatchThreadID : SV_DispatchThreadID, int groupIndex : SV_GroupIndex, int3 groupID : SV_GroupID)
 {
-    if (groupIndex == 0)
-        g_parentSum = groupID.x == 0 ? 0 : g_outputBuffer[parentOffset + groupID.x - 1];
+    //if (groupIndex == 0)
+    //    g_parentSum = groupID.x == 0 ? 0 : g_outputBuffer[parentOffset + groupID.x - 1];
 
-    GroupMemoryBarrierWithGroupSync();
+    //no need to do barriers / etc since groupID will trigger a scalar load. We hope!!
+    uint parentSum = groupID.x == 0 ? 0 : g_outputBuffer[parentOffset + groupID.x - 1];
 
-    g_outputBuffer[outputOffset + dispatchThreadID.x] += g_parentSum;
+    g_outputBuffer[outputOffset + dispatchThreadID.x] += parentSum;
 }
