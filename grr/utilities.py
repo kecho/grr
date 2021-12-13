@@ -22,3 +22,10 @@ def clear_uint_buffer(cmd_list, clear_val, buff, el_offset, el_count):
         x = math.ceil(el_count / 64),
         y = 1,
         z = 1)
+
+
+def divup(a, b):
+    return int((a + b - 1)/b)
+
+def alignup(a, b):
+    return divup(a, b) * b
