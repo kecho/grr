@@ -2,7 +2,7 @@ import coalpy.gpu as g
 import numpy as np
 import math
 import functools
-from . import bin_queues
+from . import prefix_sum as gpu_prefix_sum
 
 def prefix_sum(input_data):
     accum = 0
@@ -17,11 +17,11 @@ def test_cluster_gen():
     input_data = np.array([1 for _ in range(0, buffersz, 1)], dtype='i')
     test_input_buffer = g.Buffer(format = g.Format.R32_UINT, element_count = buffersz)
 
-    reduction_buffers = bin_queues.allocate_queue_buffers_args(buffersz)
+    reduction_buffers = gpu_prefix_sum.allocate_args(buffersz)
 
     cmd_list = g.CommandList()
     cmd_list.upload_resource(source = input_data, destination = test_input_buffer)
-    bin_queues.cluster_gen_queue_offsets(cmd_list, test_input_buffer, reduction_buffers)
+    gpu_prefix_sum.run(cmd_list, test_input_buffer, reduction_buffers)
 
     g.schedule(cmd_list)
 
@@ -40,5 +40,5 @@ def run_test(nm, fn):
     print(nm + " : " + ("PASS" if result else "FAIL"))
 
 if __name__ == "__main__":
-    run_test("test_cluster_gen_prefix_sum", test_cluster_gen)
+    run_test("test prefix sum", test_cluster_gen)
 
