@@ -119,7 +119,7 @@ class Editor:
     def _rotate_transform_mouse_control(self, target_transform, curr_mouse, delta_time, x_axis_sign = 1.0, y_axis_sign = 1.0):
         rot_vec = delta_time * self.m_cam_rotation_speed * vec.float3(curr_mouse[2] - self.m_last_mouse[0], curr_mouse[3] - self.m_last_mouse[1], 0.0)
         y_axis = vec.float3(0, 1, 0)
-        qx = vec.q_from_angle_axis(np.sign(x_axis_sign * rot_vec[0]) * (np.abs(rot_vec[0]) ** 1.2), y_axis)
+        qx = vec.q_from_angle_axis(-np.sign(x_axis_sign * rot_vec[0]) * (np.abs(rot_vec[0]) ** 1.2), y_axis)
         target_transform.rotation = (qx * target_transform.rotation)
         
         x_axis = target_transform.right
@@ -148,8 +148,8 @@ class Editor:
             new_pos = self.m_editor_camera.pos
             zero = vec.float3(0, 0, 0)
             cam_transform = self.m_editor_camera.transform
-            new_pos = new_pos + ((cam_transform.right * self.m_cam_move_speed) if self.m_right_pressed  else zero)
-            new_pos = new_pos - ((cam_transform.right * self.m_cam_move_speed) if self.m_left_pressed   else zero)
+            new_pos = new_pos - ((cam_transform.right * self.m_cam_move_speed) if self.m_right_pressed  else zero)
+            new_pos = new_pos + ((cam_transform.right * self.m_cam_move_speed) if self.m_left_pressed   else zero)
             new_pos = new_pos + ((cam_transform.front * self.m_cam_move_speed   ) if self.m_top_pressed    else zero)
             new_pos = new_pos - ((cam_transform.front * self.m_cam_move_speed   ) if self.m_bottom_pressed else zero)
             self.m_editor_camera.pos = new_pos
