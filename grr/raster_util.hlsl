@@ -10,6 +10,12 @@ namespace raster
         int triangleId;
         int binId;
 
+        void init(int2 coords, int triId)
+        {
+            triangleId = triId;
+            setCoord(coords);
+        }
+
         int2 getCoord()
         {
             return int2(binId & 0xffff, binId >> 16);

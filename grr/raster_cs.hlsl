@@ -87,11 +87,11 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
 
     geometry::AABB aabb = th.aabb();
 
+    if (any(aabb.begin.xy < float2(-1,-1)) || any(aabb.end.xy > float2(1,1)))
+        return;
+
     int2 beginTiles = ((aabb.begin.xy * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
     int2 endTiles =   ((aabb.end.xy   * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
-
-    beginTiles = clamp(beginTiles, int2(0,0), int2(g_binTileX, g_binTileY) - 1);
-    endTiles = clamp(endTiles, int2(0,0), int2(g_binTileX, g_binTileY) - 1);
 
     float2 tileDims = float2(g_binCoarseTileSize.xx / g_binFrameDims.xy) * 2.0;
 
@@ -111,8 +111,12 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
                 continue;
 
             int binId = (tileY * g_binTileX + tileX);
-            uint unused = 0;
-            InterlockedAdd(g_binCounters[binId], 1, unused);
+            uint offset = 0;
+            InterlockedAdd(g_binCounters[binId], 1, offset);
+            
+            raster::BinIntersectionRecord record;
+            record.init(int2(tileX, tileY), triId);
+            g_binOutputRecords[offset] = record;
         }
     }
 }
