@@ -3,8 +3,10 @@ from . import utilities as utils
 
 g_group_size = 128
 g_prefix_sum_group = g.Shader(file = "prefix_sum_cs.hlsl", main_function = "csPrefixSumOnGroup")
+g_prefix_sum_group_exclusive = g.Shader(file = "prefix_sum_cs.hlsl", main_function = "csPrefixSumOnGroup", defines = ["EXCLUSIVE_PREFIX"])
 g_prefix_sum_next_input = g.Shader(file = "prefix_sum_cs.hlsl", main_function = "csPrefixSumNextInput")
 g_prefix_sum_resolve_parent = g.Shader(file = "prefix_sum_cs.hlsl", main_function = "csPrefixSumResolveParent")
+g_prefix_sum_resolve_parent_exclusive = g.Shader(file = "prefix_sum_cs.hlsl", main_function = "csPrefixSumResolveParent", defines = ["EXCLUSIVE_PREFIX"])
 
 def allocate_args(input_counts):
     aligned_bin_count = utils.alignup(input_counts, g_group_size)
@@ -20,7 +22,7 @@ def allocate_args(input_counts):
             g.Buffer(name = "reductionBufferOutput", element_count = reduction_count, format = g.Format.R32_UINT),
             input_counts)
 
-def run(cmd_list, input_buffer, prefix_sum_args):
+def run(cmd_list, input_buffer, prefix_sum_args, is_exclusive = False):
     reduction_buffer_in = prefix_sum_args[0]
     reduction_buffer_out = prefix_sum_args[1]
     input_counts = prefix_sum_args[2]
@@ -38,7 +40,7 @@ def run(cmd_list, input_buffer, prefix_sum_args):
 
         cmd_list.dispatch(
             x = group_count, y = 1, z = 1,
-            shader = g_prefix_sum_group,           
+            shader = g_prefix_sum_group_exclusive if is_exclusive and iteration == 0 and group_count == 1 else g_prefix_sum_group,           
             inputs = input_buffer if iteration == 0 else reduction_buffer_in,
             outputs = reduction_buffer_out,
             constants = [input_count, 0, output_offset, 0])
@@ -60,8 +62,17 @@ def run(cmd_list, input_buffer, prefix_sum_args):
         idx = len(pass_list) - 1 - i
         (parent_count, parent_offset) = pass_list[idx + 1]
         (count, offset) = pass_list[idx]
-        cmd_list.dispatch(
-            x = utils.divup(count, g_group_size), y = 1, z = 1,
-            shader = g_prefix_sum_resolve_parent,
-            outputs = reduction_buffer_out,
-            constants = [0, 0, offset, parent_offset])
+        const = [0, 0, offset, parent_offset]
+        if i == len(pass_list) - 1 and is_exclusive:
+            cmd_list.dispatch(
+                x = utils.divup(count, g_group_size), y = 1, z = 1,
+                shader = g_prefix_sum_resolve_parent_exclusive,
+                inputs = input_buffer,
+                outputs = reduction_buffer_out,
+                constants = const)
+        else:
+            cmd_list.dispatch(
+                x = utils.divup(count, g_group_size), y = 1, z = 1,
+                shader = g_prefix_sum_resolve_parent,
+                outputs = reduction_buffer_out,
+                constants = const)

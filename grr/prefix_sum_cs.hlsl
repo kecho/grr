@@ -21,7 +21,8 @@ groupshared uint gs_prefixCache[GROUP_SIZE];
 void csPrefixSumOnGroup(int3 dispatchThreadID : SV_DispatchThreadID, int groupIndex : SV_GroupIndex)
 {
     int threadID = dispatchThreadID.x;
-    gs_prefixCache[groupIndex] = threadID >= inputCount ? 0u : g_inputBuffer[threadID + inputOffset];
+    uint inputVal = threadID >= inputCount ? 0u : g_inputBuffer[threadID + inputOffset];
+    gs_prefixCache[groupIndex] = inputVal;
 
     GroupMemoryBarrierWithGroupSync();
     
@@ -36,7 +37,13 @@ void csPrefixSumOnGroup(int3 dispatchThreadID : SV_DispatchThreadID, int groupIn
         GroupMemoryBarrierWithGroupSync();
     }
 
-    g_outputBuffer[threadID + outputOffset] = gs_prefixCache[groupIndex];
+    uint outputVal = gs_prefixCache[groupIndex];
+
+#if EXCLUSIVE_PREFIX
+    outputVal -= inputVal;
+#endif
+
+    g_outputBuffer[threadID + outputOffset] = outputVal;
 }
 
 [numthreads(GROUP_SIZE, 1, 1)]
@@ -55,6 +62,11 @@ void csPrefixSumResolveParent(int3 dispatchThreadID : SV_DispatchThreadID, int g
 
     //no need to do barriers / etc since groupID will trigger a scalar load. We hope!!
     uint parentSum = groupID.x == 0 ? 0 : g_outputBuffer[parentOffset + groupID.x - 1];
-
-    g_outputBuffer[outputOffset + dispatchThreadID.x] += parentSum;
+    int index = outputOffset + dispatchThreadID.x;
+#if EXCLUSIVE_PREFIX
+    uint val = g_outputBuffer[index] - g_inputBuffer[index];
+    g_outputBuffer[index] = val + parentSum;
+#else
+    g_outputBuffer[index] += parentSum;
+#endif
 }
