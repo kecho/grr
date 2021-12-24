@@ -3,16 +3,17 @@
 
 namespace raster
 {
-
     //Size must match raster.py
     struct BinIntersectionRecord
     {
         int triangleId;
+        int binOffset;
         int binId;
 
-        void init(int2 coords, int triId)
+        void init(int2 coords, int triId, int inBinOffset)
         {
             triangleId = triId;
+            binOffset = inBinOffset;
             setCoord(coords);
         }
 

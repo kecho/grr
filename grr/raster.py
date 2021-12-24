@@ -10,8 +10,8 @@ g_bin_triangle_shader.resolve()
 
 class Rasterizer:
 
-    # triangleId (4b), binId (4b). See raster_utils.hlsl
-    bin_intersection_record_byte_size = (4    +   4) 
+    # triangleId (4b), binOffset (4b), binId (4b). See raster_utils.hlsl
+    bin_intersection_record_byte_size = (4 + 4 + 4) 
     bin_record_buffer_byte_size = (16 * 1024 * 1024) 
     bin_record_buffer_element_count = math.ceil(bin_record_buffer_byte_size / bin_intersection_record_byte_size)
 

@@ -87,8 +87,11 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
 
     geometry::AABB aabb = th.aabb();
 
-    if (any(aabb.begin.xy < float2(-1,-1)) || any(aabb.end.xy > float2(1,1)))
+    if (any(aabb.begin.xy > float2(1,1)) || any(aabb.end.xy < float2(-1,-1)))
         return;
+
+    aabb.begin = clamp(aabb.begin, float3(-1,-1,0), float3(1,1,1));
+    aabb.end = clamp(aabb.end, float3(-1,-1,0), float3(1,1,1));
 
     int2 beginTiles = ((aabb.begin.xy * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
     int2 endTiles =   ((aabb.end.xy   * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
@@ -106,17 +109,22 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
 
             tile.begin = float3(tileB * tileDims - 1.0f.xx, 0.0);
             tile.end =   float3(tileE * tileDims - 1.0f.xx, 1.0);
+
+            if (any(aabb.begin.xy > tile.end.xy) || any(aabb.end.xy < tile.begin.xy))
+                continue;
             
             if (!geometry::intersectsSAT(th, tile))
                 continue;
 
+            //TODO: Optimize this by caching into LDS, and writting then 64 tris per batch
             int binId = (tileY * g_binTileX + tileX);
-            uint offset = 0;
-            InterlockedAdd(g_binCounters[binId], 1, offset);
-            
+            uint binOffset = 0, globalOffset = 0;
+            InterlockedAdd(g_binCounters[binId], 1, binOffset);
+            InterlockedAdd(g_totalBins[0], 1, globalOffset);
+
             raster::BinIntersectionRecord record;
-            record.init(int2(tileX, tileY), triId);
-            g_binOutputRecords[offset] = record;
+            record.init(int2(tileX, tileY), triId, binOffset);
+            g_binOutputRecords[globalOffset] = record;
         }
     }
 }
