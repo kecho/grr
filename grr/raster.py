@@ -52,8 +52,6 @@ class Rasterizer:
             format = g.Format.R32_UINT,
             element_count = Rasterizer.bin_record_buffer_element_count)
 
-        print("ELEMENTS: " + str(Rasterizer.bin_record_buffer_element_count))
-
         self.m_bin_elements_args_buffer = g.Buffer(
             name = "bin_elements_arg_buffer",
             type = g.BufferType.Standard,
@@ -180,7 +178,7 @@ class Rasterizer:
             inputs = self.m_total_records_buffer,
             outputs = self.m_bin_elements_args_buffer)
 
-        self.m_bin_offsets_buffer = prefix_sum.run(cmd_list, self.m_bin_counter_buffer, self.m_prefix_sum_bins_args, is_exclusive= True)
+        self.m_bin_offsets_buffer = prefix_sum.run(cmd_list, self.m_bin_counter_buffer, self.m_prefix_sum_bins_args, is_exclusive = True, input_counts = tiles_w * tiles_h)
 
         cmd_list.dispatch(
             indirect_args = self.m_bin_elements_args_buffer,

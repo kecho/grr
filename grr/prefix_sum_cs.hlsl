@@ -49,7 +49,7 @@ void csPrefixSumOnGroup(int3 dispatchThreadID : SV_DispatchThreadID, int groupIn
 [numthreads(GROUP_SIZE, 1, 1)]
 void csPrefixSumNextInput(int3 dispatchThreadID : SV_DispatchThreadID, int3 groupID : SV_GroupID)
 {
-    g_outputBuffer[dispatchThreadID.x] = g_inputBuffer[inputOffset + groupID.x * GROUP_SIZE + GROUP_SIZE - 1];
+    g_outputBuffer[dispatchThreadID.x] = g_inputBuffer[inputOffset + dispatchThreadID.x * GROUP_SIZE + GROUP_SIZE - 1];
 }
 
 groupshared uint g_parentSum;

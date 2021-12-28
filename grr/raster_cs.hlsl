@@ -64,7 +64,7 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
     int triCounts = gs_tileCount;
 
 //SAFETY: constrain if we get gpu hangs
-#if 0
+#if 1
     triCounts = min(triCounts, 1024);
 #endif
 
@@ -94,19 +94,23 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
         if (interpResult.visible)
         {
 #if ENABLE_Z
-            float pZ, pW;
-            pZ = interpResult.eval(th.h0.z, th.h1.z, th.h2.z);
-            pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
-            pZ *= rcp(pW);
-            if (pZ < zBuffer)
-#endif
+            float pZ = interpResult.eval(th.h0.z, th.h1.z, th.h2.z);
+            float pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
+            float minW = min(th.h0.w, min(th.h1.w, th.h2.w));
+            float maxW = max(th.h0.w, max(th.h1.w, th.h2.w));
+            if (pZ > -pW && (all(abs(hCoords.xy) < abs(pW.xx))))
             {
-                writeColor = true;
-                color.xyz = finalCol;
-#if ENABLE_Z
-                zBuffer = pZ; 
+                pZ *= rcp(pW);
+                if (pZ < zBuffer)
 #endif
+                {
+                    writeColor = true;
+                    color.xyz = finalCol;
+                    zBuffer = pZ; 
+                }
+#if ENABLE_Z
             }
+#endif
         }
     }
 
@@ -171,7 +175,8 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             tile.begin = float3(geometry::uvToH(geometry::pixelToUV(tileB * COARSE_TILE_SIZE, g_binFrameDims.xy)), 0.0);
             tile.end = float3(geometry::uvToH(geometry::pixelToUV(tileE * COARSE_TILE_SIZE, g_binFrameDims.xy)), 1.0);
 
-            if (any(aabb.begin.xy > tile.end.xy) || any(aabb.end.xy < tile.begin.xy))
+            //if (any(aabb.begin.xy > tile.end.xy) || any(aabb.end.xy < tile.begin.xy))
+            if (!aabb.intersects(tile))
                 continue;
             
             if (!geometry::intersectsSAT(th, tile))

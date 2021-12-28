@@ -17,8 +17,8 @@ def prefix_sum(input_data, is_exclusive = False):
     return output
 
 def test_cluster_gen(is_exclusive = False):
-    buffersz = 5238
-    input_data = np.array([1 for _ in range(0, buffersz, 1)], dtype='i')
+    buffersz = 8529
+    input_data = np.array([x  for x in range(0, buffersz, 1)], dtype='i')
     test_input_buffer = g.Buffer(format = g.Format.R32_UINT, element_count = buffersz)
 
     reduction_buffers = gpu_prefix_sum.allocate_args(buffersz)

@@ -146,7 +146,7 @@ namespace geometry
             result.bari = computeBaryCoordPerspective(float3(p0.xy,h0.w), float3(p1.xy,h1.w), float3(p2.xy,h2.w), hCoords);
             result.isBackface = backFace > 0.0;
             result.isFrontface = frontFace > 0.0;
-            result.visible = result.isBackface || result.isFrontface;
+            result.visible = result.isBackface;
             return result;
         }
 
