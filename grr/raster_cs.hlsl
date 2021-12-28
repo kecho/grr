@@ -69,11 +69,11 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
 
     int zBuffer = 1.0;
 
-    if (gs_tileId == 4)
-    {
-        g_output[dispatchThreadId.xy] = float4(1,0,0,0);
-        return;
-    }
+    //if (gs_tileId == 4)
+    //{
+    //    g_output[dispatchThreadId.xy] = float4(1,0,0,0);
+    //    return;
+    //}
 
     for (int triIndex = 0; triIndex < triCounts; ++triIndex)
     {
