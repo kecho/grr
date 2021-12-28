@@ -189,7 +189,7 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             InterlockedAdd(g_outTotalRecords[0], 1, globalOffset);
 
             raster::BinIntersectionRecord record;
-            record.init(int2(tileX, tileY), triId, binOffset);
+            record.init(binId, triId, binOffset);
             g_binOutputRecords[globalOffset] = record;
         }
     }
@@ -229,8 +229,7 @@ void csMainWriteBinElements(int3 dispatchThreadId : SV_DispatchThreadID, int gro
         return;
 
     raster::BinIntersectionRecord record = g_binRecords[dispatchThreadId.x];
-    int2 binCoord = record.getCoord();
-    int binIndex = g_binSizes.x * binCoord.y + binCoord.x;
+    int binIndex = record.tileId;
     int outputIndex = g_binOffsets[binIndex] + record.binOffset;
     g_outBinElements[outputIndex] = record.triangleId;
 }

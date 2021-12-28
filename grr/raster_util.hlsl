@@ -8,23 +8,13 @@ namespace raster
     {
         int triangleId;
         int binOffset;
-        int binId;
+        int tileId;
 
-        void init(int2 coords, int triId, int inBinOffset)
+        void init(int inTileId, int triId, int inBinOffset)
         {
             triangleId = triId;
             binOffset = inBinOffset;
-            setCoord(coords);
-        }
-
-        int2 getCoord()
-        {
-            return int2(binId & 0xffff, binId >> 16);
-        }
-
-        void setCoord(int2 coord)
-        {
-            binId = (coord.x & 0xffff) | (coord.y << 16);
+            tileId = inTileId;
         }
 
         int3 getIndices()
