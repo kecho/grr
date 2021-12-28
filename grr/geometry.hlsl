@@ -139,14 +139,14 @@ namespace geometry
             float wb = eb.x * pb.y - eb.y * pb.x;
             float wc = ec.x * pc.y - ec.y * pc.x;
 
-            float frontFace = -max(wa, max(wb, wc));
-            float backFace = min(wa, min(wb, wc));
+            float backFace = -max(wa, max(wb, wc));
+            float frontFace = min(wa, min(wb, wc));
 
             TriInterpResult result;
             result.bari = computeBaryCoordPerspective(float3(p0.xy,h0.w), float3(p1.xy,h1.w), float3(p2.xy,h2.w), hCoords);
             result.isBackface = backFace > 0.0;
             result.isFrontface = frontFace > 0.0;
-            result.visible = result.isBackface;
+            result.visible = result.isBackface || result.isFrontface;
             return result;
         }
 

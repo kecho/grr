@@ -18,7 +18,7 @@ class Rasterizer:
 
     # single uint buffer, with the triangle ID
     bin_element_size = 4 
-    bin_record_buffer_byte_size = (16 * 1024 * 1024) 
+    bin_record_buffer_byte_size = (256 * 1024 * 1024) 
     bin_record_buffer_element_count = math.ceil(bin_record_buffer_byte_size / (bin_intersection_record_byte_size + bin_element_size))
 
     #coarse tile size in pixels

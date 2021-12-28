@@ -70,7 +70,7 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
 
 #endif
 
-    float zBuffer = 1.0;
+    float zBuffer = 0.0;
 
     for (int triIndex = 0; triIndex < triCounts; ++triIndex)
     {
@@ -98,19 +98,16 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
             float pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
             float minW = min(th.h0.w, min(th.h1.w, th.h2.w));
             float maxW = max(th.h0.w, max(th.h1.w, th.h2.w));
-            if (pZ > -pW && (all(abs(hCoords.xy) < abs(pW.xx))))
+            pZ *= rcp(pW);
+            if (pZ < 1.0 && pZ > zBuffer)
+#endif
             {
-                pZ *= rcp(pW);
-                if (pZ < zBuffer)
-#endif
-                {
-                    writeColor = true;
-                    color.xyz = finalCol;
-                    zBuffer = pZ; 
-                }
+                writeColor = true;
+                color.xyz = finalCol;
 #if ENABLE_Z
-            }
+                zBuffer = pZ; 
 #endif
+            }
         }
     }
 
@@ -150,8 +147,16 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     geometry::TriangleH th;
     th.init(tv, g_binView, g_binProj);
 
-    geometry::AABB aabb = th.aabb();
+    //if (any(abs(th.h0.xy) >= abs(th.h0.ww)) &&
+    //    any(abs(th.h1.xy) >= abs(th.h1.ww)) &&
+    //    any(abs(th.h2.xy) >= abs(th.h2.ww)))
+    //    return;
 
+    float wEpsilon = 0.001;
+    if (th.h0.w < wEpsilon || th.h1.w < wEpsilon || th.h2.w < wEpsilon)
+        return;
+
+    geometry::AABB aabb = th.aabb();
     if (any(aabb.begin.xy > float2(1,1)) || any(aabb.end.xy < float2(-1,-1)))
         return;
 
@@ -179,8 +184,8 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             if (!aabb.intersects(tile))
                 continue;
             
-            if (!geometry::intersectsSAT(th, tile))
-                continue;
+            //if (!geometry::intersectsSAT(th, tile))
+            //    continue;
 
             //TODO: Optimize this by caching into LDS, and writting then 64 tris per batch
             int binId = (tileY * g_binTileX + tileX);

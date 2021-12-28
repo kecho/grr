@@ -110,5 +110,5 @@ class Camera:
 
     def update_mats(self):
         if ((self.m_dirty_flags & Camera.s_DirtyProj) != 0):
-            self.m_proj_matrix = t.projection_matrix_from_aspect(self.m_fov, self.m_h / self.m_w, self.m_near, self.m_far)
+            self.m_proj_matrix = t.projection_matrix_from_aspect(self.m_fov, self.m_h / self.m_w, self.m_far, self.m_near)
             self.m_proj_inv_matrix = np.linalg.inv(self.m_proj_matrix)
