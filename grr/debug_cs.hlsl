@@ -6,7 +6,8 @@ Texture2D<float4> g_debugFont : register(t0);
 Texture2D<float4> g_visibilityBuffer : register(t1);
 Buffer<uint> g_totalBins : register(t2);
 Buffer<uint> g_binCounters : register(t3);
-StructuredBuffer<raster::BinIntersectionRecord> g_binOutputRecords : register(t4);
+Buffer<uint> g_binOffsets : register(t4);
+StructuredBuffer<raster::BinIntersectionRecord> g_binOutputRecords : register(t5);
 
 RWTexture2D<float4> g_output : register(u0);
 
@@ -85,11 +86,11 @@ void csMainDebugVis(int3 dti : SV_DispatchThreadID)
     int tileX = int(uv.x * g_dims.x) / g_binCoarseTileSize;
     int tileY = int(uv.y * g_dims.y) / g_binCoarseTileSize;
     int tileId = tileY * g_binTileX + tileX;
-    uint count = g_binCounters[tileId];
+    uint count = g_binOffsets[tileId];
+    //uint count = g_binCounters[tileId];
 
     float4 tileColor = drawTile(uv * g_dims.xy, g_binCoarseTileSize, count);
     float4 debugBinCol = count != 0 ? tileColor : float4(0,0,0,0);
-
     float3 finalColor = lerp(g_visibilityBuffer[dti.xy].xyz, debugBinCol.xyz, debugBinCol.a);
     g_output[dti.xy] = float4(finalColor, 1.0);
 }

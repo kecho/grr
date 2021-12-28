@@ -52,6 +52,8 @@ class Rasterizer:
             format = g.Format.R32_UINT,
             element_count = Rasterizer.bin_record_buffer_element_count)
 
+        print("ELEMENTS: " + str(Rasterizer.bin_record_buffer_element_count))
+
         self.m_bin_elements_args_buffer = g.Buffer(
             name = "bin_elements_arg_buffer",
             type = g.BufferType.Standard,
@@ -101,7 +103,8 @@ class Rasterizer:
             batch_const.extend([
                 w, h, 1.0/w, 1.0/h,
                 t, float(offset), float(batch_count), 0.0,
-                0, 0, 0, 0
+                0, 0, 0, 0,
+                int(w), int(h), 0, 0,
             ])
             cmd_list.dispatch(
                 shader = g_raster_brute_force_shader,
@@ -202,7 +205,8 @@ class Rasterizer:
         const.extend([
             float(w), float(h), 1.0/w, 1.0/h,
             t, 0.0, 0.0, 0.0,
-            int(tiles_x), int(tiles_y), int(Rasterizer.coarse_tile_size), 0
+            float(tiles_x), float(tiles_y), int(Rasterizer.coarse_tile_size), 0,
+            int(w), int(h), 0, 0,
         ])
         cmd_list.dispatch(
             shader = g_raster_shader,

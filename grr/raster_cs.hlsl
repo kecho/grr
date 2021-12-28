@@ -19,20 +19,23 @@ cbuffer Constant : register(b0)
     float4 g_outputSize;
     float4 g_timeOffsetCount;
 
-    int g_rasterTileX;
-    int g_rasterTileY;
+    float g_rasterTileX;
+    float g_rasterTileY;
     int g_rasterTileSize;
     int g_unused0;
+
+    int4 g_outputSizeInts;
 }
 
-groupshared int gs_tileId;
-groupshared int gs_tileCount;
-groupshared int gs_tileOffset;
+//TODO: align tile with group!!
+//groupshared int gs_tileId;
+//groupshared int gs_tileCount;
+//groupshared int gs_tileOffset;
 
 [numthreads(8,8,1)]
 void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV_GroupID, int groupThreadIndex : SV_GroupIndex)
 {
-    float2 uv = (dispatchThreadId.xy) * g_outputSize.zw;
+    float2 uv = (float2)(dispatchThreadId.xy) / (float2)g_outputSizeInts.xy;
     uv.y = 1.0 - uv.y;
 
     float2 hCoords = uv * float2(2.0,2.0) - float2(1.0, 1.0);
@@ -46,34 +49,33 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
     int triCounts = g_timeOffsetCount.z;
 #else
     
-    if (groupThreadIndex == 0)
-    {
-        int tileX = dispatchThreadId.x / 64;//int(uv.x * g_outputSize.x) / g_rasterTileSize;
-        int tileY = (g_outputSize.y - dispatchThreadId.y - 1)/64;//int(uv.y * g_outputSize.y) / g_rasterTileSize;
+
+    //TODO: align tile with group!!
+    //if (groupThreadIndex == 0)
+    //{
+        int gs_tileCount = 0;
+        int gs_tileOffset = 0;
+        int gs_tileId = 0;
+        int tileX = int(uv.x * g_outputSizeInts.x) / g_rasterTileSize;
+        int tileY = int(uv.y * g_outputSizeInts.y) / g_rasterTileSize;
         int tileId = tileY * g_rasterTileX + tileX;
         gs_tileCount = g_rasterBinCounts[tileId];
         gs_tileOffset = g_rasterBinOffsets[tileId];
         gs_tileId = tileId;
-    }
+    //}
     
     GroupMemoryBarrierWithGroupSync();
 
     int triCounts = gs_tileCount;
 
 //SAFETY: constrain if we get gpu hangs
-#if 1
+#if 0
     triCounts = min(triCounts, 1024);
 #endif
 
 #endif
 
-    int zBuffer = 1.0;
-
-    //if (gs_tileId == 4)
-    //{
-    //    g_output[dispatchThreadId.xy] = float4(1,0,0,0);
-    //    return;
-    //}
+    float zBuffer = 1.0;
 
     for (int triIndex = 0; triIndex < triCounts; ++triIndex)
     {

@@ -23,6 +23,7 @@ def debug_visibility_buffer(cmd_list, rasterizer, output_texture, w, h):
             rasterizer.visibility_buffer,
             rasterizer.m_total_records_buffer,
             rasterizer.m_bin_counter_buffer,
+            rasterizer.m_bin_offsets_buffer,
             rasterizer.m_bin_record_buffer],
 
         samplers = g_font_sampler,
