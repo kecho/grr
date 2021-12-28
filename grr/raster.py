@@ -5,10 +5,11 @@ from . import gpugeo
 from . import utilities
 from . import prefix_sum
 
-g_brute_force_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_brute_force", main_function = "csMainRasterBruteForce" )
+g_raster_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_brute_force", main_function = "csMainRaster" )
+g_raster_brute_force_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_brute_force", main_function = "csMainRaster", defines = ["BRUTE_FORCE=1"] )
 g_bin_triangle_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_bining", main_function = "csMainBinTriangles" )
+g_bin_elements_args_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_elements_args", main_function = "csWriteBinElementArgsBuffer");
 g_bin_elements_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_elements", main_function = "csMainWriteBinElements");
-g_bin_elements_shader.resolve();
 
 class Rasterizer:
 
@@ -50,6 +51,12 @@ class Rasterizer:
             type = g.BufferType.Standard,
             format = g.Format.R32_UINT,
             element_count = Rasterizer.bin_record_buffer_element_count)
+
+        self.m_bin_elements_args_buffer = g.Buffer(
+            name = "bin_elements_arg_buffer",
+            type = g.BufferType.Standard,
+            format = g.Format.RGBA_32_UINT,
+            element_count = 1)
 
     def update_view(self, w, h):
         if w <= self.m_max_w and h <= self.m_max_h:
@@ -93,10 +100,11 @@ class Rasterizer:
             batch_const = const
             batch_const.extend([
                 w, h, 1.0/w, 1.0/h,
-                t, float(offset), float(batch_count), 0.0
+                t, float(offset), float(batch_count), 0.0,
+                0, 0, 0, 0
             ])
             cmd_list.dispatch(
-                shader = g_brute_force_shader,
+                shader = g_raster_brute_force_shader,
                 constants = batch_const,
                 inputs = [gpugeo.m_vertex_buffer, gpugeo.m_index_buffer],
                 outputs =  self.m_visibility_buffer,
@@ -158,8 +166,57 @@ class Rasterizer:
             z = 1)
         cmd_list.end_marker()
 
-    def generate_bin_list(self, cmd_list):
+    def generate_bin_list(self, cmd_list, w, h):
+
+        tiles_w = math.ceil(w / Rasterizer.coarse_tile_size)
+        tiles_h = math.ceil(h / Rasterizer.coarse_tile_size)
+
+        cmd_list.dispatch(
+            x = 1, y = 1, z = 1,
+            shader = g_bin_elements_args_shader,
+            inputs = self.m_total_records_buffer,
+            outputs = self.m_bin_elements_args_buffer)
+
         self.m_bin_offsets_buffer = prefix_sum.run(cmd_list, self.m_bin_counter_buffer, self.m_prefix_sum_bins_args, is_exclusive= True)
+
+        cmd_list.dispatch(
+            indirect_args = self.m_bin_elements_args_buffer,
+            #x = 1, y = 1, z = 1,
+            shader = g_bin_elements_shader,
+            constants = [ int(tiles_w), int(tiles_h), 0, 0 ],
+            inputs = [self.m_total_records_buffer, self.m_bin_offsets_buffer, self.m_bin_record_buffer ],
+            outputs = self.m_bin_element_buffer)
+
+    def rasterize(
+        self,
+        cmd_list,
+        t, w, h, view_matrix, proj_matrix,
+        gpugeo : gpugeo.GpuGeo):
+
+        tiles_x = math.ceil(w / Rasterizer.coarse_tile_size)
+        tiles_y = math.ceil(h / Rasterizer.coarse_tile_size)
+
+        const = []
+        const.extend(view_matrix.flatten().tolist())
+        const.extend(proj_matrix.flatten().tolist())
+        const.extend([
+            float(w), float(h), 1.0/w, 1.0/h,
+            t, 0.0, 0.0, 0.0,
+            int(tiles_x), int(tiles_y), int(Rasterizer.coarse_tile_size), 0
+        ])
+        cmd_list.dispatch(
+            shader = g_raster_shader,
+            constants = const,
+            inputs = [
+                gpugeo.m_vertex_buffer, 
+                gpugeo.m_index_buffer,
+                self.m_bin_counter_buffer,
+                self.m_bin_offsets_buffer,
+                self.m_bin_element_buffer],
+            outputs = self.m_visibility_buffer,
+            x = math.ceil(w / 8),
+            y = math.ceil(w / 8),
+            z = 1)
 
     @property
     def visibility_buffer(self):

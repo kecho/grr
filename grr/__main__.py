@@ -8,7 +8,21 @@ from . import raster
 from . import debug
 
 info = g.get_current_adapter_info()
-print("Current device: {}".format(info[1]))
+print("""
++--------------------------------+
+{  ____________________________  } 
+{ /  _____/\______   \______   \ }   
+{/   \  ___ |       _/|       _/ } 
+{\    \_\  \|    |   \|    |   \ } 
+{ \______  /|____|_  /|____|_  / } 
+{        \/        \/        \/  } 
++--------------------------------+
+{  Gpu Renderer and Rasterizer   } 
+{  Kleber Garcia (c) 2021        }
+{  v 0.1                         }
++--------------------------------+
+""")
+print("device: {}".format(info[1]))
 
 initial_w = 720
 initial_h = 480
@@ -40,7 +54,11 @@ def on_render(render_args : g.RenderArgs):
         active_editor.camera.proj_matrix,
         geo)
 
-    rasterizer.rasterize_brute_force(
+    rasterizer.generate_bin_list(
+        cmd_list, w, h)
+
+    #rasterizer.rasterize_brute_force(
+    rasterizer.rasterize(
         cmd_list,
         render_args.render_time, w, h,
         active_editor.camera.view_matrix,

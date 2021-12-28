@@ -1,9 +1,14 @@
 #include "geometry.hlsl"
 #include "raster_util.hlsl"
 
+#define ENABLE_Z 1
+
 //Shared inputs
 StructuredBuffer<geometry::Vertex> g_verts : register(t0);
 Buffer<int> g_indices : register(t1);
+Buffer<uint> g_rasterBinCounts   : register(t2);
+Buffer<uint> g_rasterBinOffsets  : register(t3);
+Buffer<uint> g_rasterBinTriIds  : register(t4);
 
 RWTexture2D<float4> g_output  : register(u0);
 
@@ -13,26 +18,72 @@ cbuffer Constant : register(b0)
     float4x4 g_proj;
     float4 g_outputSize;
     float4 g_timeOffsetCount;
+
+    int g_rasterTileX;
+    int g_rasterTileY;
+    int g_rasterTileSize;
+    int g_unused0;
 }
 
+groupshared int gs_tileId;
+groupshared int gs_tileCount;
+groupshared int gs_tileOffset;
+
 [numthreads(8,8,1)]
-void csMainRasterBruteForce(int3 dispatchThreadId : SV_DispatchThreadID)
+void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV_GroupID, int groupThreadIndex : SV_GroupIndex)
 {
-    float2 uv = (dispatchThreadId.xy + 0.5) * g_outputSize.zw;
+    float2 uv = (dispatchThreadId.xy) * g_outputSize.zw;
     uv.y = 1.0 - uv.y;
 
     float2 hCoords = uv * float2(2.0,2.0) - float2(1.0, 1.0);
 
-    int triOffset = g_timeOffsetCount.y;
-    int triCounts = g_timeOffsetCount.z;
-
     //hack, clear target
     float4 color = float4(0,0,0,0);
     bool writeColor = false;
-    for (int triId = 0; triId < triCounts; ++triId)
+
+#if BRUTE_FORCE
+    int triOffset = g_timeOffsetCount.y;
+    int triCounts = g_timeOffsetCount.z;
+#else
+    
+    if (groupThreadIndex == 0)
     {
+        int tileX = dispatchThreadId.x / 64;//int(uv.x * g_outputSize.x) / g_rasterTileSize;
+        int tileY = (g_outputSize.y - dispatchThreadId.y - 1)/64;//int(uv.y * g_outputSize.y) / g_rasterTileSize;
+        int tileId = tileY * g_rasterTileX + tileX;
+        gs_tileCount = g_rasterBinCounts[tileId];
+        gs_tileOffset = g_rasterBinOffsets[tileId];
+        gs_tileId = tileId;
+    }
+    
+    GroupMemoryBarrierWithGroupSync();
+
+    int triCounts = gs_tileCount;
+
+//SAFETY: constrain if we get gpu hangs
+#if 1
+    triCounts = min(triCounts, 1024);
+#endif
+
+#endif
+
+    int zBuffer = 1.0;
+
+    if (gs_tileId == 4)
+    {
+        g_output[dispatchThreadId.xy] = float4(1,0,0,0);
+        return;
+    }
+
+    for (int triIndex = 0; triIndex < triCounts; ++triIndex)
+    {
+#if BRUTE_FORCE
+        int triId = triOffset + triIndex;
+#else
+        int triId = g_rasterBinTriIds[triIndex + gs_tileOffset];
+#endif
         geometry::TriangleI ti;
-        ti.load(g_indices, triOffset + triId);
+        ti.load(g_indices, triId);
 
         geometry::TriangleV tv;
         tv.load(g_verts, ti);
@@ -45,12 +96,25 @@ void csMainRasterBruteForce(int3 dispatchThreadId : SV_DispatchThreadID)
         float3 finalCol = interpResult.eval(float3(1,0,0), float3(0,1,0), float3(0,0,1));
         if (interpResult.visible)
         {
-            writeColor = true;
-            color.xyz = finalCol;
+#if ENABLE_Z
+            float pZ, pW;
+            pZ = interpResult.eval(th.h0.z, th.h1.z, th.h2.z);
+            pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
+            pZ *= rcp(pW);
+            if (pZ < zBuffer)
+#endif
+            {
+                writeColor = true;
+                color.xyz = finalCol;
+#if ENABLE_Z
+                zBuffer = pZ; 
+#endif
+            }
         }
     }
+
     if (writeColor)
-        g_output[dispatchThreadId.xy] = color;//interpResult.visible ? float4(finalCol, 1) : float4(0,0,0,1);
+        g_output[dispatchThreadId.xy] = color;
 }
 
 RWBuffer<uint> g_outTotalRecords : register(u0);
@@ -137,7 +201,14 @@ RWBuffer<uint> g_outBinElements : register(u0);
 cbuffer ConstantBinEls : register(b0)
 {
     int4 g_binSizes;
-    int4 g_binRecordCounts;
+}
+
+RWBuffer<uint4> g_outArgsBuffer : register(u0);
+
+[numthreads(1,1,1)]
+void csWriteBinElementArgsBuffer()
+{
+    g_outArgsBuffer[0] = uint4((g_totalRecords[0] + 63)/64,1,1,0);
 }
 
 groupshared uint gs_totalRecords;

@@ -63,10 +63,17 @@ namespace geometry
     // Interpolation result with 3 baricenters. See TriangleH::interp
     struct TriInterpResult
     {
+        bool isBackface;
+        bool isFrontface;
         bool visible;
         float3 bari;
 
         float3 eval(float3 a, float3 b, float3 c)
+        {
+            return a * bari.x + b * bari.y + c * bari.z;
+        }
+
+        float eval(float a, float b, float c)
         {
             return a * bari.x + b * bari.y + c * bari.z;
         }
@@ -137,7 +144,9 @@ namespace geometry
 
             TriInterpResult result;
             result.bari = computeBaryCoordPerspective(float3(p0.xy,h0.w), float3(p1.xy,h1.w), float3(p2.xy,h2.w), hCoords);
-            result.visible = (frontFace > 0.0) || (backFace > 0.0);
+            result.isBackface = backFace > 0.0;
+            result.isFrontface = frontFace > 0.0;
+            result.visible = result.isBackface || result.isFrontface;
             return result;
         }
 
