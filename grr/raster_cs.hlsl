@@ -53,7 +53,7 @@ void csMainRasterBruteForce(int3 dispatchThreadId : SV_DispatchThreadID)
         g_output[dispatchThreadId.xy] = color;//interpResult.visible ? float4(finalCol, 1) : float4(0,0,0,1);
 }
 
-RWBuffer<uint> g_totalBins : register(u0);
+RWBuffer<uint> g_outTotalRecords : register(u0);
 RWBuffer<uint> g_binCounters : register(u1);
 RWStructuredBuffer<raster::BinIntersectionRecord> g_binOutputRecords : register(u2);
 
@@ -120,12 +120,45 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             int binId = (tileY * g_binTileX + tileX);
             uint binOffset = 0, globalOffset = 0;
             InterlockedAdd(g_binCounters[binId], 1, binOffset);
-            InterlockedAdd(g_totalBins[0], 1, globalOffset);
+            InterlockedAdd(g_outTotalRecords[0], 1, globalOffset);
 
             raster::BinIntersectionRecord record;
             record.init(int2(tileX, tileY), triId, binOffset);
             g_binOutputRecords[globalOffset] = record;
         }
     }
+}
+
+Buffer<uint> g_totalRecords : register(t0);
+Buffer<uint> g_binOffsets : register(t1);
+StructuredBuffer<raster::BinIntersectionRecord> g_binRecords : register(t2);
+RWBuffer<uint> g_outBinElements : register(u0);
+
+cbuffer ConstantBinEls : register(b0)
+{
+    int4 g_binSizes;
+    int4 g_binRecordCounts;
+}
+
+groupshared uint gs_totalRecords;
+
+[numthreads(64,1,1)]
+void csMainWriteBinElements(int3 dispatchThreadId : SV_DispatchThreadID, int groupThreadIndex : SV_GroupIndex)
+{
+    if (groupThreadIndex == 0)
+    {
+        gs_totalRecords = g_totalRecords[0];
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (dispatchThreadId.x >= gs_totalRecords)
+        return;
+
+    raster::BinIntersectionRecord record = g_binRecords[dispatchThreadId.x];
+    int2 binCoord = record.getCoord();
+    int binIndex = g_binSizes.x * binCoord.y + binCoord.x;
+    int outputIndex = g_binOffsets[binIndex] + record.binOffset;
+    g_outBinElements[outputIndex] = record.triangleId;
 }
 

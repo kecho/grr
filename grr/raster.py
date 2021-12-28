@@ -3,17 +3,22 @@ import numpy as np
 import math
 from . import gpugeo
 from . import utilities
+from . import prefix_sum
 
 g_brute_force_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_brute_force", main_function = "csMainRasterBruteForce" )
 g_bin_triangle_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_bining", main_function = "csMainBinTriangles" )
-g_bin_triangle_shader.resolve()
+g_bin_elements_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_elements", main_function = "csMainWriteBinElements");
+g_bin_elements_shader.resolve();
 
 class Rasterizer:
 
     # triangleId (4b), binOffset (4b), binId (4b). See raster_utils.hlsl
     bin_intersection_record_byte_size = (4 + 4 + 4) 
+
+    # single uint buffer, with the triangle ID
+    bin_element_size = 4 
     bin_record_buffer_byte_size = (16 * 1024 * 1024) 
-    bin_record_buffer_element_count = math.ceil(bin_record_buffer_byte_size / bin_intersection_record_byte_size)
+    bin_record_buffer_element_count = math.ceil(bin_record_buffer_byte_size / (bin_intersection_record_byte_size + bin_element_size))
 
     #coarse tile size in pixels
     coarse_tile_size = 64 
@@ -21,12 +26,14 @@ class Rasterizer:
     def __init__(self, w, h):
         self.m_max_w = 0
         self.m_max_h = 0
+        self.m_total_tiles = 0 
+        self.m_bin_offsets_buffer = None
         self.update_view(w, h)
         self.allocate_raster_resources()
         return
 
     def allocate_raster_resources(self):
-        self.m_total_bins_buffer = g.Buffer(
+        self.m_total_records_buffer = g.Buffer(
                 name = "total_bins_buffer",
                 type = g.BufferType.Standard,
                 format = g.Format.R32_UINT,
@@ -37,6 +44,12 @@ class Rasterizer:
             type = g.BufferType.Structured,
             element_count = Rasterizer.bin_record_buffer_element_count,
             stride = Rasterizer.bin_intersection_record_byte_size)
+
+        self.m_bin_element_buffer = g.Buffer(
+            name = "bin_element_buffer",
+            type = g.BufferType.Standard,
+            format = g.Format.R32_UINT,
+            element_count = Rasterizer.bin_record_buffer_element_count)
 
     def update_view(self, w, h):
         if w <= self.m_max_w and h <= self.m_max_h:
@@ -53,7 +66,10 @@ class Rasterizer:
         coarse_w = math.ceil(w / Rasterizer.coarse_tile_size)
         coarse_h = math.ceil(h / Rasterizer.coarse_tile_size)
 
-        self.m_coarse_bin_tiles_counter_buffer = g.Buffer(
+        self.m_total_tiles = coarse_w * coarse_h
+        self.m_prefix_sum_bins_args = prefix_sum.allocate_args(self.m_total_tiles)
+
+        self.m_bin_counter_buffer = g.Buffer(
             name = "bin_coarse_tiles_counter",
             type = g.BufferType.Standard,
             format = g.Format.R32_UINT,
@@ -99,8 +115,8 @@ class Rasterizer:
     def clear_counter_buffers(self, cmd_list, w, h):
         tiles_w = math.ceil(w / Rasterizer.coarse_tile_size)
         tiles_h = math.ceil(h / Rasterizer.coarse_tile_size)
-        utilities.clear_uint_buffer(cmd_list, 0, self.m_coarse_bin_tiles_counter_buffer, 0, tiles_w * tiles_h)
-        utilities.clear_uint_buffer(cmd_list, 0, self.m_total_bins_buffer, 0, 1)
+        utilities.clear_uint_buffer(cmd_list, 0, self.m_bin_counter_buffer, 0, tiles_w * tiles_h)
+        utilities.clear_uint_buffer(cmd_list, 0, self.m_total_records_buffer, 0, 1)
         return
     
     def bin_tri_records(
@@ -132,8 +148,8 @@ class Rasterizer:
             ],
 
             outputs = [
-                self.m_total_bins_buffer,
-                self.m_coarse_bin_tiles_counter_buffer,
+                self.m_total_records_buffer,
+                self.m_bin_counter_buffer,
                 self.m_bin_record_buffer
             ],
 
@@ -141,6 +157,9 @@ class Rasterizer:
             y = 1,
             z = 1)
         cmd_list.end_marker()
+
+    def generate_bin_list(self, cmd_list):
+        self.m_bin_offsets_buffer = prefix_sum.run(cmd_list, self.m_bin_counter_buffer, self.m_prefix_sum_bins_args, is_exclusive= True)
 
     @property
     def visibility_buffer(self):

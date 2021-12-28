@@ -22,10 +22,11 @@ def allocate_args(input_counts):
             g.Buffer(name = "reductionBufferOutput", element_count = reduction_count, format = g.Format.R32_UINT),
             input_counts)
 
-def run(cmd_list, input_buffer, prefix_sum_args, is_exclusive = False):
+def run(cmd_list, input_buffer, prefix_sum_args, is_exclusive = False, input_counts = -1):
     reduction_buffer_in = prefix_sum_args[0]
     reduction_buffer_out = prefix_sum_args[1]
-    input_counts = prefix_sum_args[2]
+    if (input_counts == -1):
+        input_counts = prefix_sum_args[2]
     group_count = input_counts
     perform_reduction = input_counts > 0 
     iteration = 0
@@ -76,3 +77,4 @@ def run(cmd_list, input_buffer, prefix_sum_args, is_exclusive = False):
                 shader = g_prefix_sum_resolve_parent,
                 outputs = reduction_buffer_out,
                 constants = const)
+    return reduction_buffer_out

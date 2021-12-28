@@ -25,11 +25,10 @@ def test_cluster_gen(is_exclusive = False):
 
     cmd_list = g.CommandList()
     cmd_list.upload_resource(source = input_data, destination = test_input_buffer)
-    gpu_prefix_sum.run(cmd_list, test_input_buffer, reduction_buffers, is_exclusive)
+    output = gpu_prefix_sum.run(cmd_list, test_input_buffer, reduction_buffers, is_exclusive)
 
     g.schedule(cmd_list)
 
-    output = reduction_buffers[1]
     dr = g.ResourceDownloadRequest(resource = output)
     dr.resolve()
 
