@@ -1,6 +1,14 @@
 #ifndef RASTER_UTIL_H
 #define RASTER_UTIL_H
 
+#define COARSE_TILE_POW 6
+#define COARSE_TILE_SIZE (1 << (COARSE_TILE_POW))
+
+#define MICRO_TILE_POW 3 
+#define MICRO_TILE_SIZE (1 << MICRO_TILE_POW)
+
+#define MICRO_TILE_TO_TILE_SHIFT (COARSE_TILE_POW - MICRO_TILE_POW)
+
 namespace raster
 {
     //Size must match raster.py

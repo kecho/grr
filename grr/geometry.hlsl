@@ -314,6 +314,28 @@ namespace geometry
         // Passed testing for all 13 seperating axis that exist!
         return true;
     }
+
+    float2 pixelToUV(int2 pixelCoord, int2 screenSize)
+    {
+        float2 uv = (pixelCoord + 0.5) / (float2)screenSize.xy;
+        return uv;
+    }
+
+    int2 uvToPixel(float2 uv, int2 screenSize)
+    {
+        return uv.xy * screenSize;
+    }
+
+    float2 uvToH(float2 uv)
+    {
+        return float2(1,1) * (uv * 2.0 - 1.0);
+    }
+
+    float2 hToUV(float2 hCoord)
+    {
+        float2 uv = (hCoord * float2(1,1)) * 0.5 + 0.5;
+        return uv;
+    }
 }
 
 #endif

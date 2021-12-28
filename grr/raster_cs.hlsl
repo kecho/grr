@@ -28,15 +28,14 @@ cbuffer Constant : register(b0)
 }
 
 //TODO: align tile with group!!
-//groupshared int gs_tileId;
-//groupshared int gs_tileCount;
-//groupshared int gs_tileOffset;
+groupshared int gs_tileId;
+groupshared int gs_tileCount;
+groupshared int gs_tileOffset;
 
-[numthreads(8,8,1)]
+[numthreads(MICRO_TILE_SIZE,MICRO_TILE_SIZE,1)]
 void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV_GroupID, int groupThreadIndex : SV_GroupIndex)
 {
-    float2 uv = (float2)(dispatchThreadId.xy) / (float2)g_outputSizeInts.xy;
-    uv.y = 1.0 - uv.y;
+    float2 uv = geometry::pixelToUV(dispatchThreadId.xy, g_outputSizeInts.xy);
 
     float2 hCoords = uv * float2(2.0,2.0) - float2(1.0, 1.0);
 
@@ -50,19 +49,15 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
 #else
     
 
-    //TODO: align tile with group!!
-    //if (groupThreadIndex == 0)
-    //{
-        int gs_tileCount = 0;
-        int gs_tileOffset = 0;
-        int gs_tileId = 0;
-        int tileX = int(uv.x * g_outputSizeInts.x) / g_rasterTileSize;
-        int tileY = int(uv.y * g_outputSizeInts.y) / g_rasterTileSize;
+    if (groupThreadIndex == 0)
+    {
+        int tileX = groupID.x >> MICRO_TILE_TO_TILE_SHIFT;
+        int tileY = groupID.y >> MICRO_TILE_TO_TILE_SHIFT;
         int tileId = tileY * g_rasterTileX + tileX;
         gs_tileCount = g_rasterBinCounts[tileId];
         gs_tileOffset = g_rasterBinOffsets[tileId];
         gs_tileId = tileId;
-    //}
+    }
     
     GroupMemoryBarrierWithGroupSync();
 
@@ -156,25 +151,25 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     if (any(aabb.begin.xy > float2(1,1)) || any(aabb.end.xy < float2(-1,-1)))
         return;
 
-    int2 beginTiles = ((aabb.begin.xy * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
-    int2 endTiles =   ((aabb.end.xy   * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
+    int2 tilePointA = (geometry::hToUV(aabb.begin.xy) * g_binFrameDims.xy) / COARSE_TILE_SIZE;
+    int2 tilePointB =   (geometry::hToUV(aabb.end.xy) * g_binFrameDims.xy) / COARSE_TILE_SIZE;
 
-    beginTiles = clamp(beginTiles, int2(0,0), int2(g_binTileX,g_binTileY) - 1);
-    endTiles = clamp(endTiles, int2(0,0), int2(g_binTileX,g_binTileY) - 1);
+    int2 beginTiles = clamp(min(tilePointA, tilePointB), int2(0,0), int2(g_binTileX,g_binTileY) - 1);
+    int2 endTiles   = clamp(max(tilePointA, tilePointB), int2(0,0), int2(g_binTileX,g_binTileY) - 1);
 
-    float2 tileDims = float2(g_binCoarseTileSize.xx / g_binFrameDims.xy) * 2.0;
+    float2 tileDims = float2(COARSE_TILE_SIZE.xx / g_binFrameDims.xy) * 2.0;
 
     //go for each tile in this tri
     for (int tileX = beginTiles.x; tileX <= endTiles.x; ++tileX)
     {
         for (int tileY = beginTiles.y; tileY <= endTiles.y; ++tileY)
         {
-            float2 tileB = float2(tileX, tileY);
-            float2 tileE = tileB + 1.0;
+            int2 tileB = int2(tileX, tileY);
+            int2 tileE = tileB + 1;
             geometry::AABB tile;
 
-            tile.begin = float3(tileB * tileDims - 1.0f.xx, 0.0);
-            tile.end =   float3(tileE * tileDims - 1.0f.xx, 1.0);
+            tile.begin = float3(geometry::uvToH(geometry::pixelToUV(tileB * COARSE_TILE_SIZE, g_binFrameDims.xy)), 0.0);
+            tile.end = float3(geometry::uvToH(geometry::pixelToUV(tileE * COARSE_TILE_SIZE, g_binFrameDims.xy)), 1.0);
 
             if (any(aabb.begin.xy > tile.end.xy) || any(aabb.end.xy < tile.begin.xy))
                 continue;
