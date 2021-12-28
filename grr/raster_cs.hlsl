@@ -156,11 +156,11 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     if (any(aabb.begin.xy > float2(1,1)) || any(aabb.end.xy < float2(-1,-1)))
         return;
 
-    aabb.begin = clamp(aabb.begin, float3(-1,-1,0), float3(1,1,1));
-    aabb.end = clamp(aabb.end, float3(-1,-1,0), float3(1,1,1));
-
     int2 beginTiles = ((aabb.begin.xy * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
     int2 endTiles =   ((aabb.end.xy   * 0.5 + 0.5) * g_binFrameDims.xy) / g_binCoarseTileSize;
+
+    beginTiles = clamp(beginTiles, int2(0,0), int2(g_binTileX,g_binTileY) - 1);
+    endTiles = clamp(endTiles, int2(0,0), int2(g_binTileX,g_binTileY) - 1);
 
     float2 tileDims = float2(g_binCoarseTileSize.xx / g_binFrameDims.xy) * 2.0;
 
