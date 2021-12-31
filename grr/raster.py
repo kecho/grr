@@ -29,9 +29,31 @@ class Rasterizer:
         self.m_max_h = 0
         self.m_total_tiles = 0 
         self.m_bin_offsets_buffer = None
+        self.m_constant_buffer = None
         self.update_view(w, h)
         self.allocate_raster_resources()
         return
+
+    def setup_constants(self, cmd_list, w, h, view_matrix, proj_matrix, triangle_counts, triOffsets = 0, triCounts = 0):
+
+        coarse_w = math.ceil(w / Rasterizer.coarse_tile_size)
+        coarse_h = math.ceil(h / Rasterizer.coarse_tile_size)
+
+        const= [
+            float(w), float(h), 1.0/w, 1.0/h,
+            int(w), int(h), float(triOffsets), float(triCounts),
+            float(coarse_w), float(coarse_h), int(triangle_counts), int(0),
+        ]
+        const.extend(view_matrix.flatten().tolist())
+        const.extend(proj_matrix.flatten().tolist())
+
+        if self.m_constant_buffer is None:
+            self.m_constant_buffer = g.Buffer(
+                name = "ConstantBuffer", type=g.BufferType.Standard,
+                format = g.Format.R32_FLOAT, element_count = len(const), is_constant_buffer = True)
+
+    
+        cmd_list.upload_resource( source = const, destination = self.m_constant_buffer)
 
     def allocate_raster_resources(self):
         self.m_total_records_buffer = g.Buffer(
@@ -140,16 +162,9 @@ class Rasterizer:
         tiles_w = math.ceil(w / Rasterizer.coarse_tile_size)
         tiles_h = math.ceil(h / Rasterizer.coarse_tile_size)
 
-        const = [
-            float(w), float(h), 1.0/float(w), 1.0/float(h),
-            float(tiles_w), float(tiles_h), float(Rasterizer.coarse_tile_size), int(gpugeo.triCounts),
-        ]
-        const.extend(view_matrix.flatten().tolist())
-        const.extend(proj_matrix.flatten().tolist())
-
         cmd_list.dispatch(
             shader = g_bin_triangle_shader,
-            constants = const,  
+            constants = self.m_constant_buffer,#const,  
 
             inputs = [
                 gpugeo.m_vertex_buffer,
@@ -184,7 +199,6 @@ class Rasterizer:
             indirect_args = self.m_bin_elements_args_buffer,
             #x = 1, y = 1, z = 1,
             shader = g_bin_elements_shader,
-            constants = [ int(tiles_w), int(tiles_h), 0, 0 ],
             inputs = [self.m_total_records_buffer, self.m_bin_offsets_buffer, self.m_bin_record_buffer ],
             outputs = self.m_bin_element_buffer)
 
@@ -197,18 +211,9 @@ class Rasterizer:
         tiles_x = math.ceil(w / Rasterizer.coarse_tile_size)
         tiles_y = math.ceil(h / Rasterizer.coarse_tile_size)
 
-        const = []
-        const.extend(view_matrix.flatten().tolist())
-        const.extend(proj_matrix.flatten().tolist())
-        const.extend([
-            float(w), float(h), 1.0/w, 1.0/h,
-            t, 0.0, 0.0, 0.0,
-            float(tiles_x), float(tiles_y), int(Rasterizer.coarse_tile_size), 0,
-            int(w), int(h), 0, 0,
-        ])
         cmd_list.dispatch(
             shader = g_raster_shader,
-            constants = const,
+            constants = self.m_constant_buffer,#const,
             inputs = [
                 gpugeo.m_vertex_buffer, 
                 gpugeo.m_index_buffer,

@@ -23,9 +23,8 @@ print("""
 +--------------------------------+
 """)
 print("device: {}".format(info[1]))
-
-initial_w = 720
-initial_h = 480
+initial_w = 1600 
+initial_h = 900
 geo = gpugeo.GpuGeo()
 geo.create_simple_triangle()
 rasterizer = raster.Rasterizer(initial_w, initial_h)
@@ -42,11 +41,11 @@ def on_render(render_args : g.RenderArgs):
 
     active_editor.update_camera(w, h, render_args.delta_time, render_args.window)
 
-    rasterizer.update_view(w, h)
-
     utilities.clear_texture(
         cmd_list, [0.0, 0.0, 0.0, 0.0],
         rasterizer.visibility_buffer, w, h)
+
+    rasterizer.setup_constants(cmd_list, w, h, active_editor.camera.view_matrix, active_editor.camera.proj_matrix, int(geo.triCounts))
 
     rasterizer.bin_tri_records(
         cmd_list, w, h, 
@@ -76,7 +75,7 @@ def on_render(render_args : g.RenderArgs):
 w = g.Window(
     title="GRR - gpu rasterizer and renderer for python. Kleber Garcia, 2021",
     on_render = on_render,
-    width = 720, height = 480)
+    width = initial_w, height = initial_h)
 
 g.run()
 active_editor.save_editor_state()

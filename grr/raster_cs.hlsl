@@ -12,19 +12,20 @@ Buffer<uint> g_rasterBinTriIds  : register(t4);
 
 RWTexture2D<float4> g_output  : register(u0);
 
-cbuffer Constant : register(b0)
+cbuffer Constants : register(b0)
 {
-    float4x4 g_view;
-    float4x4 g_proj;
     float4 g_outputSize;
-    float4 g_timeOffsetCount;
+
+    int2   g_outputSizeInts;
+    float2 g_timeOffsetCount;
 
     float g_rasterTileX;
     float g_rasterTileY;
-    int g_rasterTileSize;
-    int g_unused0;
+    int g_binTriCounts;
+    int g_unused1;
 
-    int4 g_outputSizeInts;
+    float4x4 g_view;
+    float4x4 g_proj;
 }
 
 //TODO: align tile with group!!
@@ -35,7 +36,7 @@ groupshared int gs_tileOffset;
 [numthreads(MICRO_TILE_SIZE,MICRO_TILE_SIZE,1)]
 void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV_GroupID, int groupThreadIndex : SV_GroupIndex)
 {
-    float2 uv = geometry::pixelToUV(dispatchThreadId.xy, g_outputSizeInts.xy);
+    float2 uv = geometry::pixelToUV(dispatchThreadId.xy, g_outputSizeInts);
 
     float2 hCoords = uv * float2(2.0,2.0) - float2(1.0, 1.0);
 
@@ -44,8 +45,8 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
     bool writeColor = false;
 
 #if BRUTE_FORCE
-    int triOffset = g_timeOffsetCount.y;
-    int triCounts = g_timeOffsetCount.z;
+    int triOffset = g_timeOffsetCount.x;
+    int triCounts = g_timeOffsetCount.y;
 #else
     
 
@@ -119,16 +120,6 @@ RWBuffer<uint> g_outTotalRecords : register(u0);
 RWBuffer<uint> g_binCounters : register(u1);
 RWStructuredBuffer<raster::BinIntersectionRecord> g_binOutputRecords : register(u2);
 
-cbuffer ConstantBins : register(b0)
-{
-    float4 g_binFrameDims;
-    float g_binTileX;
-    float g_binTileY;
-    float g_binCoarseTileSize;
-    int g_binTriCounts;
-    float4x4 g_binView;
-    float4x4 g_binProj;
-}
 
 [numthreads(64, 1, 1)]
 void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
@@ -145,28 +136,40 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     tv.load(g_verts, ti);
 
     geometry::TriangleH th;
-    th.init(tv, g_binView, g_binProj);
+    th.init(tv, g_view, g_proj);
 
-    //if (any(abs(th.h0.xy) >= abs(th.h0.ww)) &&
-    //    any(abs(th.h1.xy) >= abs(th.h1.ww)) &&
-    //    any(abs(th.h2.xy) >= abs(th.h2.ww)))
+    float wEpsilon = 0.000001;
+    if (th.h0.w < 0.0)
+    {
+        th.h0 = float4(0.0,0.0,0.0,0.0);
+        th.p0 = float3(0.0,0.0,0.0);
+    }
+    if (th.h1.w < 0.0)
+    {
+        th.h1 = float4(0.0,0.0,0.0,0.0);
+        th.p1 = float3(0.0,0.0,0.0);
+    }
+    if (th.h2.w < 0.0)
+    {
+        th.h2 = float4(0.0,0.0,0.0,0.0);
+        th.p2 = float3(0.0,0.0,0.0);
+    }
+
+    //float wEpsilon = 0.001;
+    //if (th.h0.w < wEpsilon || th.h1.w < wEpsilon || th.h2.w < wEpsilon)
     //    return;
-
-    float wEpsilon = 0.001;
-    if (th.h0.w < wEpsilon || th.h1.w < wEpsilon || th.h2.w < wEpsilon)
-        return;
 
     geometry::AABB aabb = th.aabb();
     if (any(aabb.begin.xy > float2(1,1)) || any(aabb.end.xy < float2(-1,-1)))
         return;
 
-    int2 tilePointA = (geometry::hToUV(aabb.begin.xy) * g_binFrameDims.xy) / COARSE_TILE_SIZE;
-    int2 tilePointB =   (geometry::hToUV(aabb.end.xy) * g_binFrameDims.xy) / COARSE_TILE_SIZE;
+    int2 tilePointA = (geometry::hToUV(aabb.begin.xy) * g_outputSize.xy) / COARSE_TILE_SIZE;
+    int2 tilePointB =   (geometry::hToUV(aabb.end.xy) * g_outputSize.xy) / COARSE_TILE_SIZE;
 
-    int2 beginTiles = clamp(min(tilePointA, tilePointB), int2(0,0), int2(g_binTileX,g_binTileY) - 1);
-    int2 endTiles   = clamp(max(tilePointA, tilePointB), int2(0,0), int2(g_binTileX,g_binTileY) - 1);
+    int2 beginTiles = clamp(min(tilePointA, tilePointB), int2(0,0), int2(g_rasterTileX,g_rasterTileY) - 1);
+    int2 endTiles   = clamp(max(tilePointA, tilePointB), int2(0,0), int2(g_rasterTileX,g_rasterTileY) - 1);
 
-    float2 tileDims = float2(COARSE_TILE_SIZE.xx / g_binFrameDims.xy) * 2.0;
+    float2 tileDims = float2(COARSE_TILE_SIZE.xx / g_outputSize.xy) * 2.0;
 
     //go for each tile in this tri
     for (int tileX = beginTiles.x; tileX <= endTiles.x; ++tileX)
@@ -177,8 +180,8 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             int2 tileE = tileB + 1;
             geometry::AABB tile;
 
-            tile.begin = float3(geometry::uvToH(geometry::pixelToUV(tileB * COARSE_TILE_SIZE, g_binFrameDims.xy)), 0.0);
-            tile.end = float3(geometry::uvToH(geometry::pixelToUV(tileE * COARSE_TILE_SIZE, g_binFrameDims.xy)), 1.0);
+            tile.begin = float3(geometry::uvToH(geometry::pixelToUV(tileB * COARSE_TILE_SIZE, g_outputSize.xy)), 0.0);
+            tile.end = float3(geometry::uvToH(geometry::pixelToUV(tileE * COARSE_TILE_SIZE, g_outputSize.xy)), 1.0);
 
             //if (any(aabb.begin.xy > tile.end.xy) || any(aabb.end.xy < tile.begin.xy))
             if (!aabb.intersects(tile))
@@ -188,7 +191,7 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             //    continue;
 
             //TODO: Optimize this by caching into LDS, and writting then 64 tris per batch
-            int binId = (tileY * g_binTileX + tileX);
+            int binId = (tileY * g_rasterTileX + tileX);
             uint binOffset = 0, globalOffset = 0;
             InterlockedAdd(g_binCounters[binId], 1, binOffset);
             InterlockedAdd(g_outTotalRecords[0], 1, globalOffset);
@@ -204,11 +207,6 @@ Buffer<uint> g_totalRecords : register(t0);
 Buffer<uint> g_binOffsets : register(t1);
 StructuredBuffer<raster::BinIntersectionRecord> g_binRecords : register(t2);
 RWBuffer<uint> g_outBinElements : register(u0);
-
-cbuffer ConstantBinEls : register(b0)
-{
-    int4 g_binSizes;
-}
 
 RWBuffer<uint4> g_outArgsBuffer : register(u0);
 
