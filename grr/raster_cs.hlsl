@@ -17,7 +17,7 @@ cbuffer Constants : register(b0)
     float4 g_outputSize;
 
     int2   g_outputSizeInts;
-    float2 g_timeOffsetCount;
+    float2 g_unused0;
 
     float g_rasterTileX;
     float g_rasterTileY;

@@ -45,21 +45,9 @@ def on_render(render_args : g.RenderArgs):
         cmd_list, [0.0, 0.0, 0.0, 0.0],
         rasterizer.visibility_buffer, w, h)
 
-    rasterizer.setup_constants(cmd_list, w, h, active_editor.camera.view_matrix, active_editor.camera.proj_matrix, int(geo.triCounts))
-
-    rasterizer.bin_tri_records(
-        cmd_list, w, h, 
-        active_editor.camera.view_matrix,
-        active_editor.camera.proj_matrix,
-        geo)
-
-    rasterizer.generate_bin_list(
-        cmd_list, w, h)
-
-    #rasterizer.rasterize_brute_force(
     rasterizer.rasterize(
         cmd_list,
-        render_args.render_time, w, h,
+        w, h,
         active_editor.camera.view_matrix,
         active_editor.camera.proj_matrix,
         geo)
