@@ -21,9 +21,9 @@ class GpuGeo:
 
         self.m_vertex_buffer = g.Buffer(
             name ="global_vertex_buffer",
-            type = g.BufferType.Structured,
-            stride = GpuGeo.vertex_format_byte_size,
-            element_count = math.ceil(GpuGeo.vertex_pool_byte_size/GpuGeo.vertex_format_byte_size)
+            type = g.BufferType.Raw,
+            stride = 4,
+            element_count = math.ceil(GpuGeo.vertex_pool_byte_size/4)
         )
 
 

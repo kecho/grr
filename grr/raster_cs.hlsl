@@ -4,7 +4,7 @@
 #define ENABLE_Z 1
 
 //Shared inputs
-StructuredBuffer<geometry::Vertex> g_verts : register(t0);
+ByteAddressBuffer g_verts : register(t0);
 Buffer<int> g_indices : register(t1);
 Buffer<uint> g_rasterBinCounts   : register(t2);
 Buffer<uint> g_rasterBinOffsets  : register(t3);

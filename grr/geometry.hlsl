@@ -52,11 +52,18 @@ namespace geometry
         Vertex b;
         Vertex c;
 
-        void load(StructuredBuffer<Vertex> vertices, in TriangleI indices)
+        Vertex loadVertex(ByteAddressBuffer vertBuffer, int index)
         {
-            a = vertices[indices.a];
-            b = vertices[indices.b];
-            c = vertices[indices.c];
+            Vertex v;
+            v.p = asfloat(vertBuffer.Load3((index * 3)  << 2));
+            return v;
+        }
+
+        void load(ByteAddressBuffer vertices, in TriangleI indices)
+        {
+            a = loadVertex(vertices, indices.a);
+            b = loadVertex(vertices, indices.b);
+            c = loadVertex(vertices, indices.c);
         }
     };
 
