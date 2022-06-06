@@ -34,16 +34,19 @@ active_editor.load_editor_state()
 def on_render(render_args : g.RenderArgs):
     cmd_list = g.CommandList()
     output_texture = render_args.window.display_texture
-    w = render_args.width
-    h = render_args.height
-    if w == 0 or h == 0:
+    if render_args.width == 0 or render_args.height == 0:
         return False
 
     active_editor.build_ui(render_args.imgui)
 
     viewports = active_editor.viewports
     for vp in viewports:
-        active_editor.update_camera(vp.width, vp.height, render_args.delta_time, render_args.window)
+        w = render_args.width
+        h = render_args.height
+        if w == 0 or h == 0:
+            continue
+
+        active_editor.update_camera(w, h, render_args.delta_time, render_args.window)
 
         utilities.clear_texture(
             cmd_list, [0.0, 0.0, 0.0, 0.0],
