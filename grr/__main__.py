@@ -40,9 +40,10 @@ def on_render(render_args : g.RenderArgs):
     active_editor.build_ui(render_args.imgui)
 
     viewports = active_editor.viewports
+    
     for vp in viewports:
-        w = render_args.width
-        h = render_args.height
+        w = vp.width
+        h = vp.height
         if w == 0 or h == 0:
             continue
 

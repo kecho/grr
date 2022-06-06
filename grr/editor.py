@@ -18,10 +18,12 @@ class EditorViewport:
         self.m_texture = None
         self.m_width = 1920
         self.m_height = 1080
+        self.m_active = True
 
     def build_ui(self, imgui: g.ImguiBuilder):
-        valid = imgui.begin(self.m_name)
-        if (valid):
+        self.m_active = imgui.begin(self.m_name, self.m_active)
+        
+        if (self.m_active):
             (nw, nh) = imgui.get_window_size()
             nw = int(nw)
             nh = int(nh)
@@ -36,7 +38,7 @@ class EditorViewport:
                 texture = self.m_texture,
                 size = (self.m_width, self.m_height))
         imgui.end() 
-        return valid
+        return self.m_active
 
     @property
     def width(self):
@@ -137,6 +139,9 @@ class Editor:
                 self.m_camera_panel = True if imgui.menu_item(label = "Camera") else self.m_camera_panel
                 imgui.end_menu()
             if (imgui.begin_menu("Window")):
+                if (imgui.menu_item(label = "New Viewport")):
+                    new_name = "Viewport " + str(len(self.m_viewports.keys()))
+                    self.m_viewports[new_name] = EditorViewport(new_name)
                 if (imgui.menu_item(label = "Reset Layout")):
                     self.m_set_default_layout = True
                 imgui.end_menu()
@@ -253,6 +258,8 @@ class Editor:
         self.build_menu_bar(imgui)
         self.build_camera_window(imgui)
         viewport_objs = [vo for vo in self.m_viewports.values()]
+        print ([o.m_active for o in viewport_objs])
+        print ([o.m_name for o in viewport_objs])
         for vp in viewport_objs: 
             if not vp.build_ui(imgui):
                 del self.m_viewports[vp.m_name]
