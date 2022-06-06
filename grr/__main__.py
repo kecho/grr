@@ -32,7 +32,6 @@ active_editor = editor.Editor(geo, None)
 active_editor.load_editor_state()
 
 def on_render(render_args : g.RenderArgs):
-    cmd_list = g.CommandList()
     output_texture = render_args.window.display_texture
     if render_args.width == 0 or render_args.height == 0:
         return False
@@ -40,8 +39,8 @@ def on_render(render_args : g.RenderArgs):
     active_editor.build_ui(render_args.imgui)
 
     viewports = active_editor.viewports
-    
     for vp in viewports:
+        cmd_list = g.CommandList()
         w = vp.width
         h = vp.height
         if w == 0 or h == 0:

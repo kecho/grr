@@ -258,8 +258,6 @@ class Editor:
         self.build_menu_bar(imgui)
         self.build_camera_window(imgui)
         viewport_objs = [vo for vo in self.m_viewports.values()]
-        print ([o.m_active for o in viewport_objs])
-        print ([o.m_name for o in viewport_objs])
         for vp in viewport_objs: 
             if not vp.build_ui(imgui):
                 del self.m_viewports[vp.m_name]
