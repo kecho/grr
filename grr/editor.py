@@ -11,16 +11,60 @@ from . import get_module_path
 from . import camera as c
 from . import vec
 
+class EditorViewport:
+
+    def __init__(self, name):
+        self.m_name = name
+        self.m_texture = None
+        self.m_width = 1920
+        self.m_height = 1080
+
+    def build_ui(self, imgui: g.ImguiBuilder):
+        valid = imgui.begin(self.m_name)
+        if (valid):
+            (nw, nh) = imgui.get_window_size()
+            nw = int(nw)
+            nh = int(nh)
+            #update viewport texture
+            if (self.m_texture == None or self.m_width != nw or self.m_height != nh):
+                self.m_width = nw;
+                self.m_height = nh;
+                self.m_texture = g.Texture(
+                    name = self.m_name, width = self.m_width, height = self.m_height,
+                    format = g.Format.RGBA_8_UNORM)
+            imgui.image(
+                texture = self.m_texture,
+                size = (self.m_width, self.m_height))
+        imgui.end() 
+        return valid
+
+    @property
+    def width(self):
+        return self.m_width
+
+    @property
+    def height(self):
+        return self.m_height
+    
+    @property
+    def texture(self):
+        return self.m_texture
+
 class Editor:
     
     def __init__(self, geo : gpugeo.GpuGeo, default_scene : str):
+        #editor state
         self.m_active_scene_name = None
         self.m_active_scene = None
         self.m_geo = geo
         self.m_active_scene = default_scene
         self.m_editor_camera = c.Camera(1920, 1080)
-        self.reset_camera()
+        self.m_set_default_layout = False
         self.m_frame_it = 0
+        self.m_ui_frame_it = 0
+        self.m_viewports = {}
+        
+        self.reset_camera()
 
         #input state
         self.m_right_pressed = False
@@ -42,7 +86,8 @@ class Editor:
 
     def save_editor_state(self):
         state = {
-            'cam_panel' : self.m_camera_panel
+            'cam_panel' : self.m_camera_panel,
+            'viewports' : [k for k in self.m_viewports.keys()]
         }
         try:
             f = open('editor_state.json', "w")
@@ -61,6 +106,9 @@ class Editor:
             state = json.loads(f.read())
             if 'cam_panel' in state:
                 self.m_camera_panel = state['cam_panel']
+            if 'viewports' in state:
+                for vk in state['viewports']:
+                    self.m_viewports[vk] = EditorViewport(vk)
             f.close()
         except Exception as err:
             print("[Editor]: error loading state"+str(err))
@@ -72,7 +120,7 @@ class Editor:
         self.m_editor_camera.focus_distance = vec.veclen(initial_pos)
         self.m_editor_camera.update_mats()
 
-    def render_menu_bar(self, imgui : g.ImguiBuilder):
+    def build_menu_bar(self, imgui : g.ImguiBuilder):
         if (imgui.begin_main_menu_bar()):
             if (imgui.begin_menu("File")):
                 if (imgui.begin_menu("Open")):
@@ -88,9 +136,13 @@ class Editor:
             if (imgui.begin_menu("Tools")):
                 self.m_camera_panel = True if imgui.menu_item(label = "Camera") else self.m_camera_panel
                 imgui.end_menu()
+            if (imgui.begin_menu("Window")):
+                if (imgui.menu_item(label = "Reset Layout")):
+                    self.m_set_default_layout = True
+                imgui.end_menu()
             imgui.end_main_menu_bar()
 
-    def render_camera_bar(self, imgui : g.ImguiBuilder):
+    def build_camera_window(self, imgui : g.ImguiBuilder):
         if not self.m_camera_panel:
             return
 
@@ -115,6 +167,10 @@ class Editor:
     @property
     def camera(self):
         return self.m_editor_camera
+
+    @property
+    def viewports(self):
+        return self.m_viewports.values()
 
     def _rotate_transform_mouse_control(self, target_transform, curr_mouse, delta_time, x_axis_sign = 1.0, y_axis_sign = 1.0):
         rot_vec = delta_time * self.m_cam_rotation_speed * vec.float3(curr_mouse[2] - self.m_last_mouse[0], curr_mouse[3] - self.m_last_mouse[1], 0.0)
@@ -167,9 +223,42 @@ class Editor:
             self.m_last_mouse = (curr_mouse[2], curr_mouse[3])
             
 
-    def render_ui(self, imgui : g.ImguiBuilder):
-        self.render_menu_bar(imgui)
-        self.render_camera_bar(imgui)
+    def setup_default_layout(self, root_d_id, imgui : g.ImguiBuilder):
+        settings_loaded = imgui.settings_loaded()
+        if ((settings_loaded or self.m_ui_frame_it > 0) and not self.m_set_default_layout):
+            return
+
+        viewportName = 'Viewport 0'
+        if viewportName not in self.m_viewports:
+            newVp = EditorViewport(viewportName)
+            newVp.build_ui(imgui)
+            self.m_viewports[viewportName] = newVp
+
+        imgui.dockbuilder_remove_child_nodes(root_d_id)
+        (t, l, r) = imgui.dockbuilder_split_node(node_id=root_d_id, split_dir = g.ImGuiDir.Left, split_ratio = 0.2)
+        imgui.dockbuilder_dock_window("Camera", t)
+        imgui.dockbuilder_dock_window("Viewport 0", r)
+        imgui.dockbuilder_finish(root_d_id)
+        self.m_set_default_layout = False
+
+
+    def build_ui(self, imgui : g.ImguiBuilder):
+
+        root_d_id = imgui.get_id("RootDock")
+
+        imgui.begin(name="MainWindow", is_fullscreen = True)
+        imgui.dockspace(dock_id=root_d_id)
+        imgui.end()
+
+        self.build_menu_bar(imgui)
+        self.build_camera_window(imgui)
+        viewport_objs = [vo for vo in self.m_viewports.values()]
+        for vp in viewport_objs: 
+            if not vp.build_ui(imgui):
+                del self.m_viewports[vp.m_name]
+
+        self.setup_default_layout(root_d_id, imgui)
+        self.m_ui_frame_it = self.m_ui_frame_it + 1
 
     def reload_scene(self):
         if self.m_active_scene_name == None:

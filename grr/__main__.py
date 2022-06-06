@@ -39,25 +39,28 @@ def on_render(render_args : g.RenderArgs):
     if w == 0 or h == 0:
         return False
 
-    active_editor.update_camera(w, h, render_args.delta_time, render_args.window)
+    active_editor.build_ui(render_args.imgui)
 
-    utilities.clear_texture(
-        cmd_list, [0.0, 0.0, 0.0, 0.0],
-        rasterizer.visibility_buffer, w, h)
+    viewports = active_editor.viewports
+    for vp in viewports:
+        active_editor.update_camera(vp.width, vp.height, render_args.delta_time, render_args.window)
 
-    rasterizer.rasterize(
-        cmd_list,
-        w, h,
-        active_editor.camera.view_matrix,
-        active_editor.camera.proj_matrix,
-        geo)
+        utilities.clear_texture(
+            cmd_list, [0.0, 0.0, 0.0, 0.0],
+            rasterizer.visibility_buffer, w, h)
 
-    debug.debug_visibility_buffer(
-        cmd_list,
-        rasterizer, output_texture, w, h)
+        rasterizer.rasterize(
+            cmd_list,
+            w, h,
+            active_editor.camera.view_matrix,
+            active_editor.camera.proj_matrix,
+            geo)
 
-    active_editor.render_ui(render_args.imgui)
-    g.schedule(cmd_list)
+        debug.debug_visibility_buffer(
+            cmd_list,
+            rasterizer, vp.texture, w, h)
+
+        g.schedule(cmd_list)
     return
 
 w = g.Window(
