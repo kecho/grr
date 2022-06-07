@@ -200,6 +200,7 @@ class Editor:
             cam_transform.translation = [nx, ny, nz]
             if (imgui.button("reset")):
                 self.reset_camera()
+
         imgui.end()
             
 
