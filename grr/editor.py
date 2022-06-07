@@ -186,12 +186,11 @@ class Editor:
             return
 
         panel.state = imgui.begin(panel.name, panel.state)
-        if (imgui.collapsing_header("params")):
+        if (imgui.collapsing_header("Camera")):
             self.m_editor_camera.fov = imgui.slider_float(label="fov", v=self.m_editor_camera.fov, v_min=0.01 * np.pi, v_max=0.7 * np.pi)
             self.m_editor_camera.near = imgui.slider_float(label="near", v=self.m_editor_camera.near, v_min=0.001, v_max=8.0)
             self.m_editor_camera.far = imgui.slider_float(label="far", v=self.m_editor_camera.far, v_min=10.0, v_max=90000)
 
-        if (imgui.collapsing_header("transform")):
             cam_transform = self.m_editor_camera.transform
             nx = cam_transform.translation[0]
             ny = cam_transform.translation[1]
@@ -284,9 +283,7 @@ class Editor:
 
 
     def build_ui(self, imgui : g.ImguiBuilder):
-
         root_d_id = imgui.get_id("RootDock")
-
         imgui.begin(name="MainWindow", is_fullscreen = True)
         imgui.dockspace(dock_id=root_d_id)
         imgui.end()
