@@ -43,7 +43,7 @@ def on_render(render_args : g.RenderArgs):
         cmd_list = g.CommandList()
         w = vp.width
         h = vp.height
-        if w == 0 or h == 0:
+        if w == 0 or h == 0 or vp.texture == None:
             continue
 
         active_editor.update_camera(w, h, render_args.delta_time, render_args.window)
