@@ -46,7 +46,7 @@ def on_render(render_args : g.RenderArgs):
         if w == 0 or h == 0 or vp.texture == None:
             continue
 
-        active_editor.update_camera(w, h, render_args.delta_time, render_args.window)
+        vp.update(render_args.delta_time)
 
         utilities.clear_texture(
             cmd_list, [0.0, 0.0, 0.0, 0.0],
@@ -55,8 +55,8 @@ def on_render(render_args : g.RenderArgs):
         rasterizer.rasterize(
             cmd_list,
             w, h,
-            active_editor.camera.view_matrix,
-            active_editor.camera.proj_matrix,
+            vp.camera.view_matrix,
+            vp.camera.proj_matrix,
             geo)
 
         debug.debug_visibility_buffer(
