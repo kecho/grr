@@ -37,7 +37,6 @@ groupshared int gs_tileOffset;
 void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV_GroupID, int groupThreadIndex : SV_GroupIndex)
 {
     float2 uv = geometry::pixelToUV(dispatchThreadId.xy, g_outputSizeInts);
-
     float2 hCoords = uv * float2(2.0,2.0) - float2(1.0, 1.0);
 
     //hack, clear target

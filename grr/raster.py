@@ -205,7 +205,7 @@ class Rasterizer:
                 self.m_bin_element_buffer],
             outputs = self.m_visibility_buffer,
             x = math.ceil(w / 8),
-            y = math.ceil(w / 8),
+            y = math.ceil(h / 8),
             z = 1)
 
     @property

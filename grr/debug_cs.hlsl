@@ -86,9 +86,7 @@ void csMainDebugVis(int3 dti : SV_DispatchThreadID, int2 groupID : SV_GroupID)
     int tileX = groupID.x >> MICRO_TILE_TO_TILE_SHIFT;
     int tileY = groupID.y >> MICRO_TILE_TO_TILE_SHIFT;
     int tileId = tileY * g_binTileX + tileX;
-    //uint count = g_binOffsets[tileId];
     uint count = g_binCounters[tileId];
-    //uint count = tileId;
 
     float4 tileColor = drawTile(uv * g_dims.xy * 1.0, COARSE_TILE_SIZE, count);
     float4 debugBinCol = count != 0 ? tileColor : float4(0,0,0,0);
