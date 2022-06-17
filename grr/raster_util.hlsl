@@ -1,7 +1,7 @@
 #ifndef RASTER_UTIL_H
 #define RASTER_UTIL_H
 
-#define COARSE_TILE_POW 6
+#define COARSE_TILE_POW 5
 #define COARSE_TILE_SIZE (1 << (COARSE_TILE_POW))
 
 #define MICRO_TILE_POW 3 

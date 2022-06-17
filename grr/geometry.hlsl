@@ -97,9 +97,14 @@ namespace geometry
             return (begin + end) * 0.5;
         }
 
+        float3 size()
+        {
+            return end - begin;
+        }
+
         float3 extents()
         {
-            return (end - begin) * 0.5;
+            return size() * 0.5;
         }
 
         bool intersects(AABB other)

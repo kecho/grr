@@ -21,7 +21,7 @@ class Rasterizer:
     bin_record_buffer_element_count = math.ceil(bin_record_buffer_byte_size / (bin_intersection_record_byte_size + bin_element_size))
 
     #coarse tile size in pixels
-    coarse_tile_size = 64 
+    coarse_tile_size = (1 << 5)
 
     def __init__(self, w, h):
         self.m_max_w = 0

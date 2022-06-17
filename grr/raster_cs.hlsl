@@ -65,7 +65,7 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
 
 //SAFETY: constrain if we get gpu hangs
 #if 1
-    triCounts = min(triCounts, 1024);
+    triCounts = min(triCounts, 3000);
 #endif
 
 #endif
@@ -162,6 +162,9 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     if (any(aabb.begin.xy > float2(1,1)) || any(aabb.end.xy < float2(-1,-1)))
         return;
 
+    if (any(aabb.extents().xy < g_outputSize.zw))
+        return;
+
     int2 tilePointA = (geometry::hToUV(aabb.begin.xy) * g_outputSize.xy) / COARSE_TILE_SIZE;
     int2 tilePointB =   (geometry::hToUV(aabb.end.xy) * g_outputSize.xy) / COARSE_TILE_SIZE;
 
@@ -186,8 +189,8 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             if (!aabb.intersects(tile))
                 continue;
             
-            //if (!geometry::intersectsSAT(th, tile))
-            //    continue;
+            if (!geometry::intersectsSAT(th, tile))
+                continue;
 
             //TODO: Optimize this by caching into LDS, and writting then 64 tris per batch
             int binId = (tileY * g_rasterTileX + tileX);
