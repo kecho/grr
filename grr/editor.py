@@ -9,6 +9,7 @@ from . import gpugeo
 from . import default_scenes as scenes
 from . import get_module_path
 from . import camera as c
+from . import transform as t
 from . import vec
 
 class EditorPanel:
@@ -53,6 +54,7 @@ class EditorViewport:
         (nw, nh) = (int(cr_max_w - cr_min_w), int(cr_max_h - cr_min_h))
         self.m_is_focused = imgui.is_window_focused(flags = g.ImGuiFocusedFlags.RootWindow)
         if (self.m_active):
+            self._update_inputs(imgui)
             #update viewport texture
             if (nw > 0 and nh > 0 and (self.m_texture == None or self.m_width != nw or self.m_height != nh)):
                 self.m_width = nw;
@@ -65,16 +67,19 @@ class EditorViewport:
                 imgui.image(
                     texture = self.m_texture,
                     size = (self.m_width, self.m_height))
-            self._update_inputs(imgui)
         imgui.end() 
         return self.m_active
 
     def reset_camera(self):
         initial_pos = vec.float3(0, 0, -20)
-        self.m_editor_camera.pos = initial_pos
-        self.m_editor_camera.rotation = vec.q_from_angle_axis(0, vec.float3(1, 0, 0))
-        self.m_editor_camera.focus_distance = vec.veclen(initial_pos)
-        self.m_editor_camera.update_mats()
+        cam = self.m_editor_camera
+        cam.pos = initial_pos
+        cam.rotation = vec.q_from_angle_axis(0, vec.float3(1, 0, 0))
+        cam.focus_distance = vec.veclen(initial_pos)
+        cam.fov = 20 * t.to_radians()
+        cam.near = 0.01
+        cam.far = 10000
+        cam.update_mats()
 
     def _rotate_transform_mouse_control(self, target_transform, curr_mouse, delta_time, x_axis_sign = 1.0, y_axis_sign = 1.0):
         rot_vec = delta_time * self.m_cam_rotation_speed * vec.float3(curr_mouse[0] - self.m_last_mouse[0], curr_mouse[1] - self.m_last_mouse[1], 0.0)
@@ -87,12 +92,23 @@ class EditorViewport:
         target_transform.rotation = (qy * target_transform.rotation)
 
     def _get_rel_mouse(self, imgui: g.ImguiBuilder):
+        if self.m_width == 0 or self.m_height == 0:
+            return (0, 0)
         (ax, ay) = imgui.get_mouse_pos()
-        (wx, wy) = imgui.get_window_pos()
+        (wx, wy) = imgui.get_cursor_screen_pos()
         return (((ax - wx) + 0.5)/self.m_width, ((ay - wy) + 0.5)/self.m_height)
 
     def _update_inputs(self, imgui : g.ImguiBuilder):
-        if not self.is_focused:
+        curr_mouse_pos = self._get_rel_mouse(imgui)
+        is_right_click = imgui.is_mouse_down(g.ImGuiMouseButton.Right)
+
+        #if is_right_click and curr_mouse_pos[0] >= 0.0 and curr_mouse_pos[0] <= 1.0 and curr_mouse_pos[1] >= 0.0 and curr_mouse_pos[1] <= 1.0:
+        if is_right_click and imgui.is_window_hovered():
+            imgui.set_window_focus()
+
+        if not self.m_is_focused:
+            self.m_can_move_pressed = False
+            self.m_can_orbit_pressed = False
             return
 
         self.m_right_pressed = imgui.is_key_down(g.ImGuiKey.D)
@@ -101,15 +117,15 @@ class EditorViewport:
         self.m_bottom_pressed = imgui.is_key_down(g.ImGuiKey.S)
         prev_move_pressed = self.m_can_move_pressed
         prev_orbit_pressed = self.m_can_orbit_pressed
-        self.m_can_move_pressed =  imgui.is_mouse_down(g.ImGuiMouseButton.Right)
+        self.m_can_move_pressed =  is_right_click
         self.m_can_orbit_pressed =  imgui.is_key_down(g.ImGuiKey.LeftAlt) and imgui.is_mouse_down(g.ImGuiMouseButton.Left)
         if prev_move_pressed != self.m_can_move_pressed or prev_orbit_pressed != self.m_can_orbit_pressed:
-            self.m_curr_mouse = self._get_rel_mouse(imgui)
+            self.m_curr_mouse = curr_mouse_pos
             self.m_last_mouse = self.m_curr_mouse
 
         if self.m_can_move_pressed or self.m_can_orbit_pressed:
             self.m_last_mouse = self.m_curr_mouse
-            self.m_curr_mouse = self._get_rel_mouse(imgui)
+            self.m_curr_mouse = curr_mouse_pos
 
     def update(self, delta_time):
         self.m_editor_camera.w = self.m_width
@@ -238,7 +254,7 @@ class Editor:
             if (imgui.begin_menu("Window")):
                 if (imgui.menu_item(label = "New Viewport")):
                     vp_id_list = [vp.id for vp in self.m_viewports.values()]
-                    next_id = (0 if len(vp_id_list) is 0 else (max(vp_id_list) + 1))
+                    next_id = (0 if len(vp_id_list) == 0 else (max(vp_id_list) + 1))
                     new_name = "Viewport " + str(next_id)
                     self.m_viewports[next_id] = EditorViewport(next_id)
                 if (imgui.menu_item(label = "Reset Layout")):
@@ -252,8 +268,9 @@ class Editor:
             return
 
         panel.state = imgui.begin(panel.name, panel.state)
-        if (self.m_selected_viewport != None and imgui.collapsing_header("Camera")):
+        if (self.m_selected_viewport != None and imgui.collapsing_header("Camera", g.ImGuiTreeNodeFlags.DefaultOpen)):
             cam = self.m_selected_viewport.camera
+            imgui.text(self.m_selected_viewport.name)
             cam.fov = imgui.slider_float(label="fov", v=cam.fov, v_min=0.01 * np.pi, v_max=0.7 * np.pi)
             cam.near = imgui.slider_float(label="near", v=cam.near, v_min=0.001, v_max=8.0)
             cam.far = imgui.slider_float(label="far", v=cam.far, v_min=10.0, v_max=90000)
@@ -279,7 +296,6 @@ class Editor:
 
         if 0 not in self.m_viewports:
             newVp = EditorViewport(0)
-            newVp.build_ui(imgui)
             self.m_viewports[0] = newVp
 
         imgui.dockbuilder_remove_child_nodes(root_d_id)
