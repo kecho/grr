@@ -38,6 +38,8 @@ class Rasterizer:
 
     def rasterize(self, cmd_list, w, h, view_matrix, proj_matrix, geo):
 
+        cmd_list.begin_marker("rasterize")
+
         utilities.clear_texture(
             cmd_list, [0.0, 0.0, 0.0, 0.0],
             self.m_visibility_buffer, w, h)
@@ -60,10 +62,13 @@ class Rasterizer:
             view_matrix,
             proj_matrix,
             geo)
+
+        cmd_list.end_marker()
         
 
     def setup_constants(self, cmd_list, w, h, view_matrix, proj_matrix, triangle_counts):
 
+        cmd_list.begin_marker("setup_constants")
         tiles_w, tiles_h = self.get_tile_size(w, h)
 
         const= [
@@ -81,6 +86,7 @@ class Rasterizer:
 
     
         cmd_list.upload_resource( source = const, destination = self.m_constant_buffer)
+        cmd_list.end_marker()
 
     def allocate_raster_resources(self):
         self.m_total_records_buffer = g.Buffer(
@@ -173,6 +179,8 @@ class Rasterizer:
         tiles_w = math.ceil(w / Rasterizer.coarse_tile_size)
         tiles_h = math.ceil(h / Rasterizer.coarse_tile_size)
 
+        cmd_list.begin_marker("generate_bin_list")
+
         cmd_list.dispatch(
             x = 1, y = 1, z = 1,
             shader = g_bin_elements_args_shader,
@@ -188,12 +196,15 @@ class Rasterizer:
             inputs = [self.m_total_records_buffer, self.m_bin_offsets_buffer, self.m_bin_record_buffer ],
             outputs = self.m_bin_element_buffer)
 
+        cmd_list.end_marker()
+
     def dispatch_fine_raster(
         self,
         cmd_list,
         w, h, view_matrix, proj_matrix,
         gpugeo : gpugeo.GpuGeo):
 
+        cmd_list.begin_marker("fine_raster")
         cmd_list.dispatch(
             shader = g_raster_shader,
             constants = self.m_constant_buffer,#const,
@@ -207,6 +218,7 @@ class Rasterizer:
             x = math.ceil(w / 8),
             y = math.ceil(h / 8),
             z = 1)
+        cmd_list.end_marker()
 
     @property
     def visibility_buffer(self):
