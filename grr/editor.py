@@ -47,6 +47,21 @@ class EditorViewport:
         self.m_last_mouse = (0, 0)
         self.m_curr_mouse = (0, 0)
 
+        #debug tile settings
+        self.m_debug_fine_tiles = False
+
+    def save_editor_state(self):
+        return {
+            'id' : self.m_id,
+            'name' : self.m_name,
+            'debug_fine_tiles' : self.m_debug_fine_tiles
+        }
+
+    def load_editor_state(self, json):
+        self.m_id = json['id']
+        self.m_name = json['name']
+        self.m_debug_fine_tiles = json['debug_fine_tiles']
+
     def build_ui(self, imgui: g.ImguiBuilder):
         self.m_active = imgui.begin(self.m_name, self.m_active)
         (cr_min_w, cr_min_h) = imgui.get_window_content_region_min()
@@ -150,7 +165,6 @@ class EditorViewport:
             cam_transform.update_mats()
             self.m_last_mouse = (self.m_curr_mouse[0], self.m_curr_mouse[1])
             
-
     @property
     def camera(self):
         return self.m_editor_camera
@@ -178,8 +192,15 @@ class EditorViewport:
     @property
     def is_focused(self):
         return self.m_is_focused
-    
 
+    @property
+    def debug_fine_tiles(self):
+        return self.m_debug_fine_tiles;
+
+    @debug_fine_tiles.setter
+    def debug_fine_tiles(self, value):
+        self.m_debug_fine_tiles = value;
+    
 class Editor:
     
     def __init__(self, geo : gpugeo.GpuGeo, default_scene : str):
@@ -205,7 +226,7 @@ class Editor:
     def save_editor_state(self):
         state = {
             'tools_states' : [(k, v.state) for (k, v) in self.m_tools.items()],
-            'viewport_ids' : [vp.id for vp in self.m_viewports.values()]
+            'viewport_states' : [vp.save_editor_state() for vp in self.m_viewports.values()]
         }
         try:
             f = open('editor_state.json', "w")
@@ -227,9 +248,11 @@ class Editor:
                 for (tn, tstate) in toolsTuples:
                     if tn in self.m_tools:
                         self.m_tools[tn].state = tstate
-            if 'viewport_ids' in state:
-                for vp_id in state['viewport_ids']:
-                    self.m_viewports[vp_id] = EditorViewport(vp_id)
+            if 'viewport_states' in state:
+                for vp_json in state['viewport_states']:
+                    new_vp = EditorViewport(0)
+                    new_vp.load_editor_state(vp_json)
+                    self.m_viewports[new_vp.id] = new_vp
             f.close()
         except Exception as err:
             print("[Editor]: error loading state"+str(err))
@@ -268,20 +291,24 @@ class Editor:
             return
 
         panel.state = imgui.begin(panel.name, panel.state)
-        if (self.m_selected_viewport != None and imgui.collapsing_header("Camera", g.ImGuiTreeNodeFlags.DefaultOpen)):
-            cam = self.m_selected_viewport.camera
-            imgui.text(self.m_selected_viewport.name)
-            cam.fov = imgui.slider_float(label="fov", v=cam.fov, v_min=0.01 * np.pi, v_max=0.7 * np.pi)
-            cam.near = imgui.slider_float(label="near", v=cam.near, v_min=0.001, v_max=8.0)
-            cam.far = imgui.slider_float(label="far", v=cam.far, v_min=10.0, v_max=90000)
+        if self.m_selected_viewport != None:
+            if (imgui.collapsing_header("Camera", g.ImGuiTreeNodeFlags.DefaultOpen)):
+                cam = self.m_selected_viewport.camera
+                imgui.text(self.m_selected_viewport.name)
+                cam.fov = imgui.slider_float(label="fov", v=cam.fov, v_min=0.01 * np.pi, v_max=0.7 * np.pi)
+                cam.near = imgui.slider_float(label="near", v=cam.near, v_min=0.001, v_max=8.0)
+                cam.far = imgui.slider_float(label="far", v=cam.far, v_min=10.0, v_max=90000)
 
-            nx = cam.transform.translation[0]
-            ny = cam.transform.translation[1]
-            nz = cam.transform.translation[2]
-            (nx, ny, nz) = imgui.input_float3(label="pos", v=[nx, ny, nz])
-            cam.transform.translation = [nx, ny, nz]
-            if (imgui.button("reset")):
-                self.m_selected_viewport.reset_camera()
+                nx = cam.transform.translation[0]
+                ny = cam.transform.translation[1]
+                nz = cam.transform.translation[2]
+                (nx, ny, nz) = imgui.input_float3(label="pos", v=[nx, ny, nz])
+                cam.transform.translation = [nx, ny, nz]
+                if (imgui.button("reset")):
+                    self.m_selected_viewport.reset_camera()
+
+            if (imgui.collapsing_header("Debug", g.ImGuiTreeNodeFlags.DefaultOpen)):
+                self.m_selected_viewport.debug_fine_tiles = imgui.checkbox(label = "Show fine tiles", v = self.m_selected_viewport.debug_fine_tiles)
 
         imgui.end()
             

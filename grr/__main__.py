@@ -59,9 +59,9 @@ def on_render(render_args : g.RenderArgs):
             vp.camera.proj_matrix,
             geo)
 
-        debug.debug_visibility_buffer(
+        debug.debug_overlay(
             cmd_list,
-            rasterizer, vp.texture, w, h)
+            rasterizer, vp.texture, vp)
 
         g.schedule(cmd_list)
     return

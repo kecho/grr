@@ -2,20 +2,31 @@ import coalpy.gpu as g
 import math
 from . import raster
 
-## TODO: samplers are busted, must fix.
+#enums, must match those in debug_cs.hlsl
+class OverlayFlags:
+    NONE = 0
+    SHOW_FINE_TILES = 1 << 0
+
+#font stuff
 g_font_sampler = g.Sampler(filter_type = g.FilterType.Linear)
 g_debug_vis_shader = g.Shader(file = "debug_cs.hlsl", name = "debug_visibility", main_function = "csMainDebugVis")
 g_debug_font_texture = g.Texture(file = "data/debug_font.jpg")
 
-def debug_visibility_buffer(cmd_list, rasterizer, output_texture, w, h):
+def debug_overlay(cmd_list, rasterizer, output_texture, view_settings):
+    w = view_settings.width
+    h = view_settings.height
     cmd_list.begin_marker("debug_visibility")
     tile_x = math.ceil(w / raster.Rasterizer.coarse_tile_size)
     tile_y = math.ceil(h / raster.Rasterizer.coarse_tile_size)
+    overlay_flags = OverlayFlags.NONE
+    if view_settings.debug_fine_tiles:
+        overlay_flags |= OverlayFlags.SHOW_FINE_TILES
+
     cmd_list.dispatch(
         shader = g_debug_vis_shader,
         constants = [
             int(w), int(h), 0, 0,
-            float(tile_x), float(tile_y), int(raster.Rasterizer.coarse_tile_size), int(0)
+            float(tile_x), float(tile_y), int(raster.Rasterizer.coarse_tile_size), int(overlay_flags)
         ],
 
         inputs = [

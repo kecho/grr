@@ -1,6 +1,9 @@
 #include "raster_util.hlsl"
 #include "geometry.hlsl"
 
+#define OVERLAY_FLAGS_NONE 0
+#define OVERLAY_FLAGS_SHOW_FINE_TILES 1 << 0
+
 SamplerState g_fontSampler : register(s0);
 
 Texture2D<float4> g_debugFont : register(t0);
@@ -25,7 +28,7 @@ cbuffer Constants : register(b0)
     float g_binTileX;
     float g_binTileY;
     int   g_binCoarseTileSize;
-    int   g_unused;
+    int   g_overlayFlags;
 }
 
 float4 drawNumber(float2 uv, int digitsCount, int number)
@@ -89,17 +92,21 @@ float4 drawTile(int2 coord, int tileSize, int tileCount)
 [numthreads(MICRO_TILE_SIZE,MICRO_TILE_SIZE,1)]
 void csMainDebugVis(int3 dti : SV_DispatchThreadID, int2 groupID : SV_GroupID)
 {
-    float2 uv = geometry::pixelToUV(dti.xy, g_dims.xy);
-    int tileX = groupID.x >> MICRO_TILE_TO_TILE_SHIFT;
-    int tileY = groupID.y >> MICRO_TILE_TO_TILE_SHIFT;
-    int tileId = tileY * g_binTileX + tileX;
-    uint count = g_binCounters[tileId];
-
-    float4 tileColor = drawTile(uv * g_dims.xy * 1.0, COARSE_TILE_SIZE, count);
-    float4 debugBinCol = count != 0 ? tileColor : float4(0,0,0,0);
-    //float4 debugBinCol = float4(0,0,0,0);
-    float3 finalColor = lerp(g_visibilityBuffer[dti.xy].xyz, debugBinCol.xyz, debugBinCol.a);
-
+    float3 finalColor = g_visibilityBuffer[dti.xy].xyz;
     int2 outputCoord = int2(dti.x, g_dims.y - dti.y - 1);
+
+    [branch]
+    if ((g_overlayFlags & OVERLAY_FLAGS_SHOW_FINE_TILES) != 0)
+    {
+        float2 uv = geometry::pixelToUV(dti.xy, g_dims.xy);
+        int tileX = groupID.x >> MICRO_TILE_TO_TILE_SHIFT;
+        int tileY = groupID.y >> MICRO_TILE_TO_TILE_SHIFT;
+        int tileId = tileY * g_binTileX + tileX;
+        uint count = g_binCounters[tileId];
+        float4 tileColor = drawTile(uv * g_dims.xy * 1.0, COARSE_TILE_SIZE, count);
+        float4 debugBinCol = count != 0 ? tileColor : float4(0,0,0,0);
+        finalColor = lerp(finalColor, debugBinCol.xyz, debugBinCol.a);
+    }
+
     g_output[outputCoord] = float4(finalColor, 1.0);
 }
