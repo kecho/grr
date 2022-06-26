@@ -6,3 +6,4 @@ editor_state.json
 __pycache__
 .vscode
 tags
+.shader_pdb

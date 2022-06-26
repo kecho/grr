@@ -5,7 +5,7 @@ from . import gpugeo
 from . import utilities
 from . import prefix_sum
 
-g_raster_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_brute_force", main_function = "csMainRaster" )
+g_raster_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_fine_tile", main_function = "csMainRaster" )
 g_bin_triangle_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_bining", main_function = "csMainBinTriangles" )
 g_bin_elements_args_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_elements_args", main_function = "csWriteBinElementArgsBuffer");
 g_bin_elements_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_elements", main_function = "csMainWriteBinElements");

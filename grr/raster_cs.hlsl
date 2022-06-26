@@ -33,6 +33,42 @@ groupshared int gs_tileId;
 groupshared int gs_tileCount;
 groupshared int gs_tileOffset;
 
+#define TRIANGLE_CACHE_COUNT (MICRO_TILE_SIZE * MICRO_TILE_SIZE)
+groupshared uint gs_furthestZ;
+groupshared geometry::TriangleH gs_th[TRIANGLE_CACHE_COUNT];
+groupshared uint gs_triValid[TRIANGLE_CACHE_COUNT];
+
+void loadTriangleGroup(int groupThreadIndex)
+{
+    geometry::TriangleH th = (geometry::TriangleH)0;
+    uint triValid = 0;
+    if (groupThreadIndex < gs_tileCount) 
+    {
+        int triId = g_rasterBinTriIds[groupThreadIndex + gs_tileOffset];
+        geometry::TriangleI ti;
+        ti.load(g_indices, triId);
+        
+        geometry::TriangleV tv;
+        tv.load(g_verts, ti);
+        th.init(tv, g_view, g_proj);
+
+        triValid = asuint(th.aabb().end.z) < gs_furthestZ ? 0 : 1;
+    }
+
+    gs_th[groupThreadIndex] = th;
+    gs_triValid[groupThreadIndex] = triValid;
+}
+
+void nextTriangleGroup(int groupThreadIndex)
+{
+    if (groupThreadIndex == 0)
+    {
+        gs_tileCount -= TRIANGLE_CACHE_COUNT;
+        gs_tileOffset += TRIANGLE_CACHE_COUNT;
+        gs_furthestZ = asuint(1.0);
+    }
+}
+
 [numthreads(MICRO_TILE_SIZE,MICRO_TILE_SIZE,1)]
 void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV_GroupID, int groupThreadIndex : SV_GroupIndex)
 {
@@ -43,72 +79,56 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
     float4 color = float4(0,0,0,0);
     bool writeColor = false;
 
-#if BRUTE_FORCE
-    int triOffset = g_timeOffsetCount.x;
-    int triCounts = g_timeOffsetCount.y;
-#else
-    
-
     if (groupThreadIndex == 0)
     {
         int tileX = groupID.x >> MICRO_TILE_TO_TILE_SHIFT;
         int tileY = groupID.y >> MICRO_TILE_TO_TILE_SHIFT;
         int tileId = tileY * g_rasterTileX + tileX;
-        gs_tileCount = g_rasterBinCounts[tileId];
+        gs_tileCount = min(g_rasterBinCounts[tileId], 10000);
         gs_tileOffset = g_rasterBinOffsets[tileId];
         gs_tileId = tileId;
+        gs_furthestZ = asuint(1.0f);
     }
     
     GroupMemoryBarrierWithGroupSync();
 
-    int triCounts = gs_tileCount;
-
-//SAFETY: constrain if we get gpu hangs
-#if 1
-    triCounts = min(triCounts, 3000);
-#endif
-
-#endif
-
     float zBuffer = 0.0;
-
-    for (int triIndex = 0; triIndex < triCounts; ++triIndex)
+    while (gs_tileCount > 0)
     {
-#if BRUTE_FORCE
-        int triId = triOffset + triIndex;
-#else
-        int triId = g_rasterBinTriIds[triIndex + gs_tileOffset];
-#endif
-        geometry::TriangleI ti;
-        ti.load(g_indices, triId);
+        uint unusedVal;
+        InterlockedMin(gs_furthestZ, asuint(zBuffer), unusedVal);
+        GroupMemoryBarrierWithGroupSync();
 
-        geometry::TriangleV tv;
-        tv.load(g_verts, ti);
+        loadTriangleGroup(groupThreadIndex);
+        GroupMemoryBarrierWithGroupSync();
 
-        geometry::TriangleH th;
-        th.init(tv, g_view, g_proj);
-
-        geometry::TriInterpResult interpResult = th.interp(hCoords);
-        
-        float3 finalCol = interpResult.eval(float3(1,0,0), float3(0,1,0), float3(0,0,1));
-        if (interpResult.visible)
+        int cacheCount = min(TRIANGLE_CACHE_COUNT, gs_tileCount);
+        for (int triIndex = 0; triIndex < cacheCount; ++triIndex)
         {
-#if ENABLE_Z
-            float pZ = interpResult.eval(th.h0.z, th.h1.z, th.h2.z);
-            float pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
-            float minW = min(th.h0.w, min(th.h1.w, th.h2.w));
-            float maxW = max(th.h0.w, max(th.h1.w, th.h2.w));
-            pZ *= rcp(pW);
-            if (pZ < 1.0 && pZ > zBuffer)
-#endif
+            if (!gs_triValid[triIndex])
+                continue;
+
+            geometry::TriangleH th = gs_th[triIndex];
+            geometry::TriInterpResult interpResult = th.interp(hCoords);
+            float3 finalCol = interpResult.eval(float3(1,0,0), float3(0,1,0), float3(0,0,1));
+            if (interpResult.visible)
             {
-                writeColor = true;
-                color.xyz = finalCol;
-#if ENABLE_Z
-                zBuffer = pZ; 
-#endif
+                float pZ = interpResult.eval(th.h0.z, th.h1.z, th.h2.z);
+                float pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
+                float minW = min(th.h0.w, min(th.h1.w, th.h2.w));
+                float maxW = max(th.h0.w, max(th.h1.w, th.h2.w));
+                pZ *= rcp(pW);
+                if (pZ < 1.0 && pZ > zBuffer)
+                {
+                    writeColor = true;
+                    color.xyz = finalCol;
+                    zBuffer = pZ; 
+                }
             }
         }
+
+        nextTriangleGroup(groupThreadIndex);
+        GroupMemoryBarrierWithGroupSync();
     }
 
     if (writeColor)
