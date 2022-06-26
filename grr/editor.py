@@ -216,6 +216,7 @@ class Editor:
 
         #ui panels states
         self.m_tools = self.createToolPanels()
+        self.m_active_scene_name = get_module_path() + scenes.data['teapot']
         self.reload_scene()
 
     def createToolPanels(self):
