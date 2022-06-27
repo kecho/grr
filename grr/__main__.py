@@ -37,8 +37,8 @@ def on_render(render_args : g.RenderArgs):
         return False
 
     active_editor.build_ui(render_args.imgui)
-
     viewports = active_editor.viewports
+    active_editor.profiler.begin_capture()
     for vp in viewports:
         cmd_list = g.CommandList()
         w = vp.width
@@ -64,6 +64,8 @@ def on_render(render_args : g.RenderArgs):
             rasterizer, vp.texture, vp)
 
         g.schedule(cmd_list)
+    active_editor.profiler.end_capture()
+
     return
 
 w = g.Window(
@@ -73,3 +75,4 @@ w = g.Window(
 
 g.run()
 active_editor.save_editor_state()
+w = None

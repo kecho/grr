@@ -10,6 +10,7 @@ from . import default_scenes as scenes
 from . import get_module_path
 from . import camera as c
 from . import transform as t
+from . import profiler as profiler
 from . import vec
 
 class EditorPanel:
@@ -204,7 +205,6 @@ class EditorViewport:
 class Editor:
     
     def __init__(self, geo : gpugeo.GpuGeo, default_scene : str):
-        #editor state
         self.m_active_scene_name = None
         self.m_active_scene = None
         self.m_geo = geo
@@ -213,15 +213,16 @@ class Editor:
         self.m_ui_frame_it = 0
         self.m_selected_viewport = None
         self.m_viewports = {}
+        self.m_profiler = profiler.Profiler()
 
-        #ui panels states
         self.m_tools = self.createToolPanels()
         self.m_active_scene_name = get_module_path() + scenes.data['teapot']
         self.reload_scene()
 
     def createToolPanels(self):
         return {
-            'view_panel' : EditorPanel("View Settings", False)
+            'view_panel' : EditorPanel("View Settings", False),
+            'profiler' : EditorPanel("Profiler", False)
         }
 
     def save_editor_state(self):
@@ -312,10 +313,23 @@ class Editor:
                 self.m_selected_viewport.debug_fine_tiles = imgui.checkbox(label = "Show fine tiles", v = self.m_selected_viewport.debug_fine_tiles)
 
         imgui.end()
+
+    def build_profiler(self, imgui : g.ImguiBuilder):
+        panel = self.m_tools['profiler']
+        if not panel.state:
+            return
+
+        self.m_profiler.active = True
+        self.m_profiler.build_ui(imgui)
+        panel.state = self.m_profiler.active
             
     @property
     def viewports(self):
         return self.m_viewports.values()
+
+    @property
+    def profiler(self):
+        return self.m_profiler
 
     def setup_default_layout(self, root_d_id, imgui : g.ImguiBuilder):
         settings_loaded = imgui.settings_loaded()
@@ -330,8 +344,11 @@ class Editor:
         (t, l, r) = imgui.dockbuilder_split_node(node_id=root_d_id, split_dir = g.ImGuiDir.Left, split_ratio = 0.2)
         view_panel = self.m_tools['view_panel']
         view_panel.state = True
+        self.m_tools['profiler'].state = True
         imgui.dockbuilder_dock_window(view_panel.name, t)
-        imgui.dockbuilder_dock_window("Viewport 0", r)
+        (b, l, t) = imgui.dockbuilder_split_node(node_id=r, split_dir = g.ImGuiDir.Down, split_ratio = 0.2)
+        imgui.dockbuilder_dock_window("Viewport 0", t)
+        imgui.dockbuilder_dock_window("Profiler", b)
         imgui.dockbuilder_finish(root_d_id)
         self.m_set_default_layout = False
 
@@ -344,6 +361,7 @@ class Editor:
 
         self.build_menu_bar(imgui)
         self.build_view_settings_panel(imgui)
+        self.build_profiler(imgui)
         viewport_objs = [vo for vo in self.m_viewports.values()]
         for vp in viewport_objs: 
             if not vp.build_ui(imgui):
