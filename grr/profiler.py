@@ -41,7 +41,6 @@ class Profiler:
             #imgui.text(name + ": " + ("%.4f ms" % (time * 1000)))
 
     def _build_hierarchy_ui(self, imgui : g.ImguiBuilder):
-        imgui.show_demo_window()
         if len(self.m_marker_data) == 0:
             return
 
