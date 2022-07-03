@@ -1,11 +1,15 @@
 import coalpy.gpu as g
 import numpy as nm
+import math as m
 
 class Profiler:
     def __init__(self):
         self.m_active = True
         self.m_gpu_queue = []
         self.m_marker_data = []
+        self.m_plot_capacity = 200
+        self.m_curr_tick = 0
+        self.m_gpu_plot_data = nm.zeros((self.m_plot_capacity, 2), dtype='f')
 
     @property
     def active(self):
@@ -15,14 +19,14 @@ class Profiler:
     def active(self, value):
         self.m_active = value
 
-    def build_ui(self, imgui : g.ImguiBuilder):
+    def build_ui(self, imgui : g.ImguiBuilder, implot : g.ImplotBuilder):
         self.m_active = imgui.begin("Profiler", self.m_active)
         if self.m_active and imgui.begin_tab_bar("profiler-tab"):
             if imgui.begin_tab_item("Hierarchy"):
                 self._build_hierarchy_ui(imgui)
                 imgui.end_tab_item()
             if imgui.begin_tab_item("Timeline"):
-                imgui.text("TODO: timeline")
+                self._build_timeline_ui(imgui, implot)
                 imgui.end_tab_item()
             if imgui.begin_tab_item("Raw Counters"):
                 self._build_raw_counter_ui(imgui)
@@ -38,7 +42,6 @@ class Profiler:
             time = end_timestamp - begin_timestamp
             time_str = "%.4f ms" % (time * 1000)
             imgui.text(f"{id: <4} {parent_id : <8} {name : <32} {time_str : ^10} {begin_timestamp : ^18} {end_timestamp : ^18} ")
-            #imgui.text(name + ": " + ("%.4f ms" % (time * 1000)))
 
     def _build_hierarchy_ui(self, imgui : g.ImguiBuilder):
         if len(self.m_marker_data) == 0:
@@ -70,6 +73,13 @@ class Profiler:
                     node_stack.append((id, True)) #set was_visited to True
                     node_stack.extend([(child_id, False) for child_id in children])
 
+    def _build_timeline_ui(self, imgui : g.ImguiBuilder, implot : g.ImplotBuilder):
+        if implot.begin_plot("Timeline"):
+            implot.setup_axes("Tick", "Time (ms)", 0, g.ImPlotAxisFlags.AutoFit)
+            implot.setup_axis_limits(g.ImAxis.X1, self.m_curr_tick - self.m_plot_capacity, self.m_curr_tick, g.ImPlotCond.Always)
+            implot.plot_line("gpu time", self.m_gpu_plot_data, self.m_plot_capacity, (self.m_curr_tick % self.m_plot_capacity))
+            implot.end_plot()
+
     def begin_capture(self):
         if not self.active:
             return
@@ -85,7 +95,18 @@ class Profiler:
         self.m_gpu_queue.append((marker_gpu_data, request))
 
         if self.m_gpu_queue[0][1].is_ready():
+            #extract markers
             (data, req) = self.m_gpu_queue.pop(0)
             gpu_timestamps = nm.frombuffer(req.data_as_bytearray(), dtype=nm.uint64)
             self.m_marker_data = [ (name, gpu_timestamps[ei]/data.timestamp_frequency, gpu_timestamps[bi]/data.timestamp_frequency, pid) for (name, pid, bi, ei) in data.markers]
+
+            #process history
+            root_tstamps = [(b, e) for (_, e, b, pid) in self.m_marker_data if pid == -1]
+            if len(root_tstamps) > 0:
+                begin_timestamp = min([t for (t, _) in root_tstamps])
+                end_timestamp = max([t for (_, t) in root_tstamps])
+                plot_idx = (self.m_curr_tick % self.m_plot_capacity)
+                self.m_gpu_plot_data[plot_idx][0] = self.m_curr_tick
+                self.m_gpu_plot_data[plot_idx][1] = (end_timestamp - begin_timestamp) * 1000
+            self.m_curr_tick = self.m_curr_tick + 1
         

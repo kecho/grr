@@ -314,13 +314,13 @@ class Editor:
 
         imgui.end()
 
-    def build_profiler(self, imgui : g.ImguiBuilder):
+    def build_profiler(self, imgui : g.ImguiBuilder, implot : g.ImplotBuilder):
         panel = self.m_tools['profiler']
         if not panel.state:
             return
 
         self.m_profiler.active = True
-        self.m_profiler.build_ui(imgui)
+        self.m_profiler.build_ui(imgui, implot)
         panel.state = self.m_profiler.active
             
     @property
@@ -353,7 +353,7 @@ class Editor:
         self.m_set_default_layout = False
 
 
-    def build_ui(self, imgui : g.ImguiBuilder):
+    def build_ui(self, imgui : g.ImguiBuilder, implot : g.ImplotBuilder):
         root_d_id = imgui.get_id("RootDock")
         imgui.begin(name="MainWindow", is_fullscreen = True)
         imgui.dockspace(dock_id=root_d_id)
@@ -361,7 +361,7 @@ class Editor:
 
         self.build_menu_bar(imgui)
         self.build_view_settings_panel(imgui)
-        self.build_profiler(imgui)
+        self.build_profiler(imgui, implot)
         viewport_objs = [vo for vo in self.m_viewports.values()]
         for vp in viewport_objs: 
             if not vp.build_ui(imgui):

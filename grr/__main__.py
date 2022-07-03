@@ -36,7 +36,7 @@ def on_render(render_args : g.RenderArgs):
     if render_args.width == 0 or render_args.height == 0:
         return False
 
-    active_editor.build_ui(render_args.imgui)
+    active_editor.build_ui(render_args.imgui, render_args.implot)
     viewports = active_editor.viewports
     active_editor.profiler.begin_capture()
     for vp in viewports:
