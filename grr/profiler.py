@@ -22,11 +22,11 @@ class Profiler:
     def build_ui(self, imgui : g.ImguiBuilder, implot : g.ImplotBuilder):
         self.m_active = imgui.begin("Profiler", self.m_active)
         if self.m_active and imgui.begin_tab_bar("profiler-tab"):
-            if imgui.begin_tab_item("Hierarchy"):
-                self._build_hierarchy_ui(imgui)
-                imgui.end_tab_item()
             if imgui.begin_tab_item("Timeline"):
                 self._build_timeline_ui(imgui, implot)
+                imgui.end_tab_item()
+            if imgui.begin_tab_item("Hierarchy"):
+                self._build_hierarchy_ui(imgui)
                 imgui.end_tab_item()
             if imgui.begin_tab_item("Raw Counters"):
                 self._build_raw_counter_ui(imgui)

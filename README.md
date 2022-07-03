@@ -1,9 +1,20 @@
 # GRR
 
-by Kleber Garcia
+```
++--------------------------------+
+{  ____________________________  }
+{ /  _____/\______   \______   \ }
+{/   \  ___ |       _/|       _/ }
+{\    \_\  \|    |   \|    |   \ }
+{ \______  /|____|_  /|____|_  / }
+{        \/        \/        \/  }
++--------------------------------+
+{  Gpu Renderer and Rasterizer   }
+{  Kleber Garcia (c) 2021        }
+{  v 0.1                         }
++--------------------------------+
+```
 
-GRR stands for Gpu Rasterizer and Renderer.
+![grrmain](docs/images/grr_main.png?raw=true)
 
-It is a python based GPU software rasterizer and renderer, purely built on compute using [coalpy](https://github.com/kecho/coalpy) as a hardware abstraction layer.
 
-Still work in progress.
