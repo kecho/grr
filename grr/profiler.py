@@ -77,7 +77,7 @@ class Profiler:
         if implot.begin_plot("Timeline"):
             implot.setup_axes("Tick", "Time (ms)", 0, g.ImPlotAxisFlags.AutoFit)
             implot.setup_axis_limits(g.ImAxis.X1, self.m_curr_tick - self.m_plot_capacity, self.m_curr_tick, g.ImPlotCond.Always)
-            implot.plot_line("gpu time", self.m_gpu_plot_data, self.m_plot_capacity, (self.m_curr_tick % self.m_plot_capacity))
+            implot.plot_shaded("gpu time", self.m_gpu_plot_data, self.m_plot_capacity, -float('inf'),(self.m_curr_tick % self.m_plot_capacity))
             implot.end_plot()
 
     def begin_capture(self):

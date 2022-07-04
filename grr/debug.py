@@ -5,7 +5,8 @@ from . import raster
 #enums, must match those in debug_cs.hlsl
 class OverlayFlags:
     NONE = 0
-    SHOW_FINE_TILES = 1 << 0
+    SHOW_COARSE_TILES = 1 << 0
+    SHOW_FINE_TILES = 1 << 1
 
 #font stuff
 g_font_sampler = g.Sampler(filter_type = g.FilterType.Linear)
@@ -19,8 +20,8 @@ def debug_overlay(cmd_list, rasterizer, output_texture, view_settings):
     tile_x = math.ceil(w / raster.Rasterizer.coarse_tile_size)
     tile_y = math.ceil(h / raster.Rasterizer.coarse_tile_size)
     overlay_flags = OverlayFlags.NONE
-    if view_settings.debug_fine_tiles:
-        overlay_flags |= OverlayFlags.SHOW_FINE_TILES
+    if view_settings.debug_coarse_tiles:
+        overlay_flags |= OverlayFlags.SHOW_COARSE_TILES
 
     cmd_list.dispatch(
         shader = g_debug_vis_shader,

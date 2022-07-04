@@ -49,19 +49,19 @@ class EditorViewport:
         self.m_curr_mouse = (0, 0)
 
         #debug tile settings
-        self.m_debug_fine_tiles = False
+        self.m_debug_coarse_tiles = False
 
     def save_editor_state(self):
         return {
             'id' : self.m_id,
             'name' : self.m_name,
-            'debug_fine_tiles' : self.m_debug_fine_tiles
+            'debug_coarse_tiles' : self.m_debug_coarse_tiles
         }
 
     def load_editor_state(self, json):
         self.m_id = json['id']
         self.m_name = json['name']
-        self.m_debug_fine_tiles = json['debug_fine_tiles']
+        self.m_debug_coarse_tiles = json['debug_coarse_tiles']
 
     def build_ui(self, imgui: g.ImguiBuilder):
         self.m_active = imgui.begin(self.m_name, self.m_active)
@@ -195,12 +195,12 @@ class EditorViewport:
         return self.m_is_focused
 
     @property
-    def debug_fine_tiles(self):
-        return self.m_debug_fine_tiles;
+    def debug_coarse_tiles(self):
+        return self.m_debug_coarse_tiles;
 
-    @debug_fine_tiles.setter
-    def debug_fine_tiles(self, value):
-        self.m_debug_fine_tiles = value;
+    @debug_coarse_tiles.setter
+    def debug_coarse_tiles(self, value):
+        self.m_debug_coarse_tiles = value;
     
 class Editor:
     
@@ -310,7 +310,7 @@ class Editor:
                     self.m_selected_viewport.reset_camera()
 
             if (imgui.collapsing_header("Debug", g.ImGuiTreeNodeFlags.DefaultOpen)):
-                self.m_selected_viewport.debug_fine_tiles = imgui.checkbox(label = "Show fine tiles", v = self.m_selected_viewport.debug_fine_tiles)
+                self.m_selected_viewport.debug_coarse_tiles = imgui.checkbox(label = "Show coarse tiles", v = self.m_selected_viewport.debug_coarse_tiles)
 
         imgui.end()
 

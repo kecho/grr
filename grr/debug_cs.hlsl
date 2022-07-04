@@ -2,7 +2,8 @@
 #include "geometry.hlsl"
 
 #define OVERLAY_FLAGS_NONE 0
-#define OVERLAY_FLAGS_SHOW_FINE_TILES 1 << 0
+#define OVERLAY_FLAGS_SHOW_COARSE_TILES 1 << 0
+#define OVERLAY_FLAGS_SHOW_FINE_TILES 1 << 1
 
 SamplerState g_fontSampler : register(s0);
 
@@ -89,14 +90,14 @@ float4 drawTile(int2 coord, int tileSize, int tileCount)
     return tileColor;
 }
 
-[numthreads(MICRO_TILE_SIZE,MICRO_TILE_SIZE,1)]
+[numthreads(FINE_TILE_SIZE, FINE_TILE_SIZE, 1)]
 void csMainDebugVis(int3 dti : SV_DispatchThreadID, int2 groupID : SV_GroupID)
 {
     float3 finalColor = g_visibilityBuffer[dti.xy].xyz;
     int2 outputCoord = int2(dti.x, g_dims.y - dti.y - 1);
 
     [branch]
-    if ((g_overlayFlags & OVERLAY_FLAGS_SHOW_FINE_TILES) != 0)
+    if ((g_overlayFlags & OVERLAY_FLAGS_SHOW_COARSE_TILES) != 0)
     {
         float2 uv = geometry::pixelToUV(dti.xy, g_dims.xy);
         int tileX = groupID.x >> MICRO_TILE_TO_TILE_SHIFT;

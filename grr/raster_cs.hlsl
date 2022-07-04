@@ -17,26 +17,24 @@ cbuffer Constants : register(b0)
     float4 g_outputSize;
 
     int2   g_outputSizeInts;
-    float2 g_unused0;
-
-    float g_rasterTileX;
-    float g_rasterTileY;
     int g_binTriCounts;
     int g_unused1;
+
+    float2 g_coarseTileSize;
+    float2 g_fineTileSize;
 
     float4x4 g_view;
     float4x4 g_proj;
 }
 
-//TODO: align tile with group!!
-groupshared int gs_tileId;
 groupshared int gs_tileCount;
 groupshared int gs_tileOffset;
 
-#define TRIANGLE_CACHE_COUNT (MICRO_TILE_SIZE * MICRO_TILE_SIZE)
+#define TRIANGLE_CACHE_COUNT (FINE_TILE_SIZE * FINE_TILE_SIZE)
 groupshared uint gs_furthestZ;
 groupshared geometry::TriangleH gs_th[TRIANGLE_CACHE_COUNT];
 groupshared uint gs_triValid[TRIANGLE_CACHE_COUNT];
+groupshared geometry::AABB gs_tileBounds;
 
 void loadTriangleGroup(int groupThreadIndex)
 {
@@ -51,8 +49,7 @@ void loadTriangleGroup(int groupThreadIndex)
         geometry::TriangleV tv;
         tv.load(g_verts, ti);
         th.init(tv, g_view, g_proj);
-
-        triValid = asuint(th.aabb().end.z) < gs_furthestZ ? 0 : 1;
+        triValid = asuint(th.aabb().end.z) >= gs_furthestZ && th.aabb().intersects(gs_tileBounds) ? 1 : 0;
     }
 
     gs_th[groupThreadIndex] = th;
@@ -69,7 +66,7 @@ void nextTriangleGroup(int groupThreadIndex)
     }
 }
 
-[numthreads(MICRO_TILE_SIZE,MICRO_TILE_SIZE,1)]
+[numthreads(FINE_TILE_SIZE, FINE_TILE_SIZE, 1)]
 void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV_GroupID, int groupThreadIndex : SV_GroupIndex)
 {
     float2 uv = geometry::pixelToUV(dispatchThreadId.xy, g_outputSizeInts);
@@ -83,10 +80,11 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
     {
         int tileX = groupID.x >> MICRO_TILE_TO_TILE_SHIFT;
         int tileY = groupID.y >> MICRO_TILE_TO_TILE_SHIFT;
-        int tileId = tileY * g_rasterTileX + tileX;
+        int tileId = tileY * g_coarseTileSize.x + tileX;
         gs_tileCount = min(g_rasterBinCounts[tileId], 10000);
         gs_tileOffset = g_rasterBinOffsets[tileId];
-        gs_tileId = tileId;
+        gs_tileBounds.begin = float3(geometry::uvToH(geometry::pixelToUV(groupID.xy * FINE_TILE_SIZE, g_outputSize.xy)), 0.0);
+        gs_tileBounds.end = float3(geometry::uvToH(geometry::pixelToUV((groupID.xy + int2(1,1)) * FINE_TILE_SIZE, g_outputSize.xy)), 1.0);
         gs_furthestZ = asuint(1.0f);
     }
     
@@ -188,10 +186,8 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     int2 tilePointA = (geometry::hToUV(aabb.begin.xy) * g_outputSize.xy) / COARSE_TILE_SIZE;
     int2 tilePointB =   (geometry::hToUV(aabb.end.xy) * g_outputSize.xy) / COARSE_TILE_SIZE;
 
-    int2 beginTiles = clamp(min(tilePointA, tilePointB), int2(0,0), int2(g_rasterTileX,g_rasterTileY) - 1);
-    int2 endTiles   = clamp(max(tilePointA, tilePointB), int2(0,0), int2(g_rasterTileX,g_rasterTileY) - 1);
-
-    float2 tileDims = float2(COARSE_TILE_SIZE.xx / g_outputSize.xy) * 2.0;
+    int2 beginTiles = clamp(min(tilePointA, tilePointB), int2(0,0), int2(g_coarseTileSize) - 1);
+    int2 endTiles   = clamp(max(tilePointA, tilePointB), int2(0,0), int2(g_coarseTileSize) - 1);
 
     //go for each tile in this tri
     for (int tileX = beginTiles.x; tileX <= endTiles.x; ++tileX)
@@ -213,7 +209,7 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
                 continue;
 
             //TODO: Optimize this by caching into LDS, and writting then 64 tris per batch
-            int binId = (tileY * g_rasterTileX + tileX);
+            int binId = (tileY * g_coarseTileSize.x + tileX);
             uint binOffset = 0, globalOffset = 0;
             InterlockedAdd(g_binCounters[binId], 1, binOffset);
             InterlockedAdd(g_outTotalRecords[0], 1, globalOffset);

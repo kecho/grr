@@ -23,6 +23,9 @@ class Rasterizer:
     #coarse tile size in pixels
     coarse_tile_size = (1 << 5)
 
+    #coarse tile size in pixels
+    fine_tile_size = (1 << 3)
+
     def __init__(self, w, h):
         self.m_max_w = 0
         self.m_max_h = 0
@@ -35,6 +38,9 @@ class Rasterizer:
 
     def get_tile_size(self, w, h):
         return (math.ceil(w / Rasterizer.coarse_tile_size), math.ceil(h / Rasterizer.coarse_tile_size))
+
+    def get_fine_tile_size(self, w, h):
+        return (math.ceil(w / Rasterizer.fine_tile_size), math.ceil(h / Rasterizer.fine_tile_size))
 
     def rasterize(self, cmd_list, w, h, view_matrix, proj_matrix, geo):
 
@@ -70,11 +76,12 @@ class Rasterizer:
 
         cmd_list.begin_marker("setup_constants")
         tiles_w, tiles_h = self.get_tile_size(w, h)
+        fine_tiles_w, fine_tiles_h = self.get_fine_tile_size(w, h)
 
         const= [
             float(w), float(h), 1.0/w, 1.0/h,
-            int(w), int(h), 0, 0,
-            float(tiles_w), float(tiles_h), int(triangle_counts), int(0),
+            int(w), int(h), int(triangle_counts), 0,
+            float(tiles_w), float(tiles_h), float(fine_tiles_w), float(fine_tiles_h),
         ]
         const.extend(view_matrix.flatten().tolist())
         const.extend(proj_matrix.flatten().tolist())
@@ -204,6 +211,7 @@ class Rasterizer:
         w, h, view_matrix, proj_matrix,
         gpugeo : gpugeo.GpuGeo):
 
+        (fine_tiles_x, fine_tiles_y) = self.get_fine_tile_size(w, h)
         cmd_list.begin_marker("fine_raster")
         cmd_list.dispatch(
             shader = g_raster_shader,
@@ -215,8 +223,8 @@ class Rasterizer:
                 self.m_bin_offsets_buffer,
                 self.m_bin_element_buffer],
             outputs = self.m_visibility_buffer,
-            x = math.ceil(w / 8),
-            y = math.ceil(h / 8),
+            x = fine_tiles_x,
+            y = fine_tiles_y,
             z = 1)
         cmd_list.end_marker()
 
