@@ -1,6 +1,17 @@
 #include "geometry.hlsl"
 #include "raster_util.hlsl"
 
+#define FINE_TILE_THREAD_COUNT (FINE_TILE_SIZE * FINE_TILE_SIZE)
+#define COARSE_TILE_THREAD_COUNT (COARSE_TILE_SIZE * COARSE_TILE_SIZE)
+
+#ifdef FINE_RASTER_ENABLED
+#define GroupSize FINE_TILE_THREAD_COUNT
+#else
+#define GroupSize COARSE_TILE_THREAD_COUNT
+#endif
+
+#include "threading.hlsl"
+
 #define ENABLE_Z 1
 
 //Shared inputs
@@ -30,13 +41,13 @@ cbuffer Constants : register(b0)
 groupshared int gs_tileCount;
 groupshared int gs_tileOffset;
 
-#define TRIANGLE_CACHE_COUNT (FINE_TILE_SIZE * FINE_TILE_SIZE)
+#define TRIANGLE_CACHE_COUNT FINE_TILE_THREAD_COUNT
 groupshared uint gs_furthestZ;
 groupshared geometry::TriangleH gs_th[TRIANGLE_CACHE_COUNT];
-groupshared uint gs_triValid[TRIANGLE_CACHE_COUNT];
 groupshared geometry::AABB gs_tileBounds;
+groupshared uint gs_triangleBatchCount;
 
-void loadTriangleGroup(int groupThreadIndex)
+void fineTileCullTriangleBatch(int groupThreadIndex)
 {
     geometry::TriangleH th = (geometry::TriangleH)0;
     uint triValid = 0;
@@ -52,11 +63,17 @@ void loadTriangleGroup(int groupThreadIndex)
         triValid = asuint(th.aabb().end.z) >= gs_furthestZ && th.aabb().intersects(gs_tileBounds) ? 1 : 0;
     }
 
-    gs_th[groupThreadIndex] = th;
-    gs_triValid[groupThreadIndex] = triValid;
+    Threading::Group group;
+    group.init((uint)groupThreadIndex);
+    uint offset, count;
+    group.prefixExclusive(triValid, offset, count);
+    if (triValid)
+        gs_th[offset] = th;
+    if (groupThreadIndex == 0)
+        gs_triangleBatchCount = count;
 }
 
-void nextTriangleGroup(int groupThreadIndex)
+void nextTriangleBatch(int groupThreadIndex)
 {
     if (groupThreadIndex == 0)
     {
@@ -78,8 +95,8 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
 
     if (groupThreadIndex == 0)
     {
-        int tileX = groupID.x >> MICRO_TILE_TO_TILE_SHIFT;
-        int tileY = groupID.y >> MICRO_TILE_TO_TILE_SHIFT;
+        int tileX = groupID.x >> FINE_TILE_TO_TILE_SHIFT;
+        int tileY = groupID.y >> FINE_TILE_TO_TILE_SHIFT;
         int tileId = tileY * g_coarseTileSize.x + tileX;
         gs_tileCount = min(g_rasterBinCounts[tileId], 10000);
         gs_tileOffset = g_rasterBinOffsets[tileId];
@@ -97,15 +114,11 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
         InterlockedMin(gs_furthestZ, asuint(zBuffer), unusedVal);
         GroupMemoryBarrierWithGroupSync();
 
-        loadTriangleGroup(groupThreadIndex);
+        fineTileCullTriangleBatch(groupThreadIndex);
         GroupMemoryBarrierWithGroupSync();
 
-        int cacheCount = min(TRIANGLE_CACHE_COUNT, gs_tileCount);
-        for (int triIndex = 0; triIndex < cacheCount; ++triIndex)
+        for (uint triIndex = 0; triIndex < gs_triangleBatchCount; ++triIndex)
         {
-            if (!gs_triValid[triIndex])
-                continue;
-
             geometry::TriangleH th = gs_th[triIndex];
             geometry::TriInterpResult interpResult = th.interp(hCoords);
             float3 finalCol = interpResult.eval(float3(1,0,0), float3(0,1,0), float3(0,0,1));
@@ -113,8 +126,6 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
             {
                 float pZ = interpResult.eval(th.h0.z, th.h1.z, th.h2.z);
                 float pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
-                float minW = min(th.h0.w, min(th.h1.w, th.h2.w));
-                float maxW = max(th.h0.w, max(th.h1.w, th.h2.w));
                 pZ *= rcp(pW);
                 if (pZ < 1.0 && pZ > zBuffer)
                 {
@@ -125,7 +136,7 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
             }
         }
 
-        nextTriangleGroup(groupThreadIndex);
+        nextTriangleBatch(groupThreadIndex);
         GroupMemoryBarrierWithGroupSync();
     }
 

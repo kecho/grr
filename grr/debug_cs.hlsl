@@ -100,8 +100,8 @@ void csMainDebugVis(int3 dti : SV_DispatchThreadID, int2 groupID : SV_GroupID)
     if ((g_overlayFlags & OVERLAY_FLAGS_SHOW_COARSE_TILES) != 0)
     {
         float2 uv = geometry::pixelToUV(dti.xy, g_dims.xy);
-        int tileX = groupID.x >> MICRO_TILE_TO_TILE_SHIFT;
-        int tileY = groupID.y >> MICRO_TILE_TO_TILE_SHIFT;
+        int tileX = groupID.x >> FINE_TILE_TO_TILE_SHIFT;
+        int tileY = groupID.y >> FINE_TILE_TO_TILE_SHIFT;
         int tileId = tileY * g_binTileX + tileX;
         uint count = g_binCounters[tileId];
         float4 tileColor = drawTile(uv * g_dims.xy * 1.0, COARSE_TILE_SIZE, count);

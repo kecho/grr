@@ -1,6 +1,8 @@
 
 // This value must match the group size in prefux_sum.py
 #define GROUP_SIZE 128
+#define GroupSize GROUP_SIZE
+#include "threading.hlsl"
 
 Buffer<uint> g_inputBuffer : register(t0);
 RWBuffer<uint> g_outputBuffer : register(u0);
@@ -22,27 +24,14 @@ void csPrefixSumOnGroup(int3 dispatchThreadID : SV_DispatchThreadID, int groupIn
 {
     int threadID = dispatchThreadID.x;
     uint inputVal = threadID >= inputCount ? 0u : g_inputBuffer[threadID + inputOffset];
-    gs_prefixCache[groupIndex] = inputVal;
+    Threading::Group group;
+    group.init((uint)groupIndex);
 
-    GroupMemoryBarrierWithGroupSync();
-    
-    //Hillis Steele Scan
-    for (int i = 1; i < GROUP_SIZE; i <<= 1)
-    {
-        uint val = groupIndex >= i ? gs_prefixCache[groupIndex - i] : 0u;
-        GroupMemoryBarrierWithGroupSync();
-
-        gs_prefixCache[groupIndex] += val;
-
-        GroupMemoryBarrierWithGroupSync();
-    }
-
-    uint outputVal = gs_prefixCache[groupIndex];
-
-#if EXCLUSIVE_PREFIX
-    outputVal -= inputVal;
+    uint outputVal, count;
+    group.prefixExclusive(inputVal, outputVal, count);
+#ifndef EXCLUSIVE_PREFIX
+    outputVal += inputVal;
 #endif
-
     g_outputBuffer[threadID + outputOffset] = outputVal;
 }
 
