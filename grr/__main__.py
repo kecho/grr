@@ -5,7 +5,7 @@ from . import editor
 from . import gpugeo
 from . import utilities
 from . import raster
-from . import debug
+from . import overlay
 
 info = g.get_current_adapter_info()
 print("""
@@ -57,9 +57,10 @@ def on_render(render_args : g.RenderArgs):
             w, h,
             vp.camera.view_matrix,
             vp.camera.proj_matrix,
-            geo)
+            geo,
+            vp)
 
-        debug.debug_overlay(
+        overlay.render_overlay(
             cmd_list,
             rasterizer, vp.texture, vp)
 

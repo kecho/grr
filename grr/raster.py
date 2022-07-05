@@ -5,6 +5,10 @@ from . import gpugeo
 from . import utilities
 from . import prefix_sum
 
+#enums, must match those in raster_cs.hlsl
+class RasterizerFlags:
+    RASTERIZER_FLAGS_OUTPUT_FINE_RASTER_COUNT = 1 << 0
+
 g_raster_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_fine_tile", main_function = "csMainRaster", defines = ["FINE_RASTER_ENABLED"])
 g_bin_triangle_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_bining", main_function = "csMainBinTriangles" )
 g_bin_elements_args_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_elements_args", main_function = "csWriteBinElementArgsBuffer");
@@ -31,6 +35,7 @@ class Rasterizer:
         self.m_max_h = 0
         self.m_total_tiles = 0 
         self.m_bin_offsets_buffer = None
+        self.m_fine_tile_counter_buffer = None
         self.m_constant_buffer = None
         self.update_view(w, h)
         self.allocate_raster_resources()
@@ -42,7 +47,7 @@ class Rasterizer:
     def get_fine_tile_size(self, w, h):
         return (math.ceil(w / Rasterizer.fine_tile_size), math.ceil(h / Rasterizer.fine_tile_size))
 
-    def rasterize(self, cmd_list, w, h, view_matrix, proj_matrix, geo):
+    def rasterize(self, cmd_list, w, h, view_matrix, proj_matrix, geo, view_settings = None):
 
         cmd_list.begin_marker("rasterize")
 
@@ -51,7 +56,11 @@ class Rasterizer:
             self.m_visibility_buffer, w, h)
 
         self.update_view(w, h)
-        self.setup_constants(cmd_list, w, h, view_matrix, proj_matrix, int(geo.triCounts))
+
+        flags = 0
+        if view_settings != None:
+            flags |= RasterizerFlags.RASTERIZER_FLAGS_OUTPUT_FINE_RASTER_COUNT if view_settings.debug_fine_tiles else 0
+        self.setup_constants(cmd_list, w, h, view_matrix, proj_matrix, int(geo.triCounts), flags)
 
         self.bin_tri_records(
             cmd_list, w, h, 
@@ -72,7 +81,7 @@ class Rasterizer:
         cmd_list.end_marker()
         
 
-    def setup_constants(self, cmd_list, w, h, view_matrix, proj_matrix, triangle_counts):
+    def setup_constants(self, cmd_list, w, h, view_matrix, proj_matrix, triangle_counts, flags):
 
         cmd_list.begin_marker("setup_constants")
         tiles_w, tiles_h = self.get_tile_size(w, h)
@@ -80,7 +89,7 @@ class Rasterizer:
 
         const= [
             float(w), float(h), 1.0/w, 1.0/h,
-            int(w), int(h), int(triangle_counts), 0,
+            int(w), int(h), int(triangle_counts), flags,
             float(tiles_w), float(tiles_h), float(fine_tiles_w), float(fine_tiles_h),
         ]
         const.extend(view_matrix.flatten().tolist())
@@ -142,6 +151,13 @@ class Rasterizer:
             type = g.BufferType.Standard,
             format = g.Format.R32_UINT,
             element_count = tiles_w * tiles_h)
+
+        fine_tiles_w, fine_tiles_h = self.get_fine_tile_size(w, h)
+        self.m_fine_tile_counter_buffer = g.Buffer(
+            name = "fine_tile_counter",
+            type = g.BufferType.Standard,
+            format = g.Format.R32_UINT,
+            element_count = fine_tiles_w * fine_tiles_h)
 
     def clear_counter_buffers(self, cmd_list, w, h):
         tiles_w, tiles_h = self.get_tile_size(w, h)
@@ -222,7 +238,9 @@ class Rasterizer:
                 self.m_bin_counter_buffer,
                 self.m_bin_offsets_buffer,
                 self.m_bin_element_buffer],
-            outputs = self.m_visibility_buffer,
+            outputs = [
+                self.m_visibility_buffer,
+                self.m_fine_tile_counter_buffer ],
             x = fine_tiles_x,
             y = fine_tiles_y,
             z = 1)

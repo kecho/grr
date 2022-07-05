@@ -10,21 +10,23 @@ class OverlayFlags:
 
 #font stuff
 g_font_sampler = g.Sampler(filter_type = g.FilterType.Linear)
-g_debug_vis_shader = g.Shader(file = "debug_cs.hlsl", name = "debug_visibility", main_function = "csMainDebugVis")
+g_overlay_shader = g.Shader(file = "overlay_cs.hlsl", name = "main_overlay", main_function = "csMainOverlay")
 g_debug_font_texture = g.Texture(file = "data/debug_font.jpg")
 
-def debug_overlay(cmd_list, rasterizer, output_texture, view_settings):
+def render_overlay(cmd_list, rasterizer, output_texture, view_settings):
     w = view_settings.width
     h = view_settings.height
-    cmd_list.begin_marker("debug_visibility")
+    cmd_list.begin_marker("overlay")
     tile_x = math.ceil(w / raster.Rasterizer.coarse_tile_size)
     tile_y = math.ceil(h / raster.Rasterizer.coarse_tile_size)
     overlay_flags = OverlayFlags.NONE
     if view_settings.debug_coarse_tiles:
         overlay_flags |= OverlayFlags.SHOW_COARSE_TILES
+    if view_settings.debug_fine_tiles:
+        overlay_flags |= OverlayFlags.SHOW_FINE_TILES
 
     cmd_list.dispatch(
-        shader = g_debug_vis_shader,
+        shader = g_overlay_shader,
         constants = [
             int(w), int(h), 0, 0,
             float(tile_x), float(tile_y), int(raster.Rasterizer.coarse_tile_size), int(overlay_flags)
@@ -36,7 +38,8 @@ def debug_overlay(cmd_list, rasterizer, output_texture, view_settings):
             rasterizer.m_total_records_buffer,
             rasterizer.m_bin_counter_buffer,
             rasterizer.m_bin_offsets_buffer,
-            rasterizer.m_bin_record_buffer],
+            rasterizer.m_bin_record_buffer,
+            rasterizer.m_fine_tile_counter_buffer],
 
         samplers = g_font_sampler,
 

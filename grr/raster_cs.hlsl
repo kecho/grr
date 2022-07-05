@@ -4,6 +4,8 @@
 #define FINE_TILE_THREAD_COUNT (FINE_TILE_SIZE * FINE_TILE_SIZE)
 #define COARSE_TILE_THREAD_COUNT (COARSE_TILE_SIZE * COARSE_TILE_SIZE)
 
+#define RASTERIZER_FLAGS_OUTPUT_FINE_RASTER_COUNT 1 << 0
+
 #ifdef FINE_RASTER_ENABLED
 #define GroupSize FINE_TILE_THREAD_COUNT
 #else
@@ -20,8 +22,8 @@ Buffer<int> g_indices : register(t1);
 Buffer<uint> g_rasterBinCounts   : register(t2);
 Buffer<uint> g_rasterBinOffsets  : register(t3);
 Buffer<uint> g_rasterBinTriIds  : register(t4);
-
 RWTexture2D<float4> g_output  : register(u0);
+RWBuffer<uint> g_outputFineTileCount : register(u1);
 
 cbuffer Constants : register(b0)
 {
@@ -29,7 +31,7 @@ cbuffer Constants : register(b0)
 
     int2   g_outputSizeInts;
     int g_binTriCounts;
-    int g_unused1;
+    int g_flags;
 
     float2 g_coarseTileSize;
     float2 g_fineTileSize;
@@ -46,6 +48,7 @@ groupshared uint gs_furthestZ;
 groupshared geometry::TriangleH gs_th[TRIANGLE_CACHE_COUNT];
 groupshared geometry::AABB gs_tileBounds;
 groupshared uint gs_triangleBatchCount;
+groupshared uint gs_writtenFineTileCount;
 
 void fineTileCullTriangleBatch(int groupThreadIndex)
 {
@@ -70,7 +73,10 @@ void fineTileCullTriangleBatch(int groupThreadIndex)
     if (triValid)
         gs_th[offset] = th;
     if (groupThreadIndex == 0)
+    {
         gs_triangleBatchCount = count;
+        gs_writtenFineTileCount += count;
+    }
 }
 
 void nextTriangleBatch(int groupThreadIndex)
@@ -102,6 +108,7 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
         gs_tileOffset = g_rasterBinOffsets[tileId];
         gs_tileBounds.begin = float3(geometry::uvToH(geometry::pixelToUV(groupID.xy * FINE_TILE_SIZE, g_outputSize.xy)), 0.0);
         gs_tileBounds.end = float3(geometry::uvToH(geometry::pixelToUV((groupID.xy + int2(1,1)) * FINE_TILE_SIZE, g_outputSize.xy)), 1.0);
+        gs_writtenFineTileCount = 0;
         gs_furthestZ = asuint(1.0f);
     }
     
@@ -139,6 +146,9 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
         nextTriangleBatch(groupThreadIndex);
         GroupMemoryBarrierWithGroupSync();
     }
+
+    if (groupThreadIndex == 0 && (g_flags & RASTERIZER_FLAGS_OUTPUT_FINE_RASTER_COUNT) != 0)
+        g_outputFineTileCount[groupID.y * (int)g_fineTileSize.x + groupID.x] = gs_writtenFineTileCount;
 
     if (writeColor)
         g_output[dispatchThreadId.xy] = color;
