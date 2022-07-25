@@ -39,6 +39,7 @@ def on_render(render_args : g.RenderArgs):
     active_editor.build_ui(render_args.imgui, render_args.implot)
     viewports = active_editor.viewports
     active_editor.profiler.begin_capture()
+    active_editor.render_tools()
     for vp in viewports:
         cmd_list = g.CommandList()
         w = vp.width

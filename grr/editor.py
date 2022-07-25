@@ -11,7 +11,9 @@ from . import get_module_path
 from . import camera as c
 from . import transform as t
 from . import profiler as profiler
+from . import coverage_lut_tool
 from . import vec
+
 
 class EditorPanel:
     def __init__(self, name, state):
@@ -225,6 +227,7 @@ class Editor:
         self.m_selected_viewport = None
         self.m_viewports = {}
         self.m_profiler = profiler.Profiler()
+        self.m_coverage_lut_tool = coverage_lut_tool.CoverageLUTTool()
 
         self.m_tools = self.createToolPanels()
         self.m_active_scene_name = get_module_path() + scenes.data['teapot']
@@ -233,7 +236,8 @@ class Editor:
     def createToolPanels(self):
         return {
             'view_panel' : EditorPanel("View Settings", False),
-            'profiler' : EditorPanel("Profiler", False)
+            'profiler' : EditorPanel("Profiler", False),
+            'coverage_lut_tool' : EditorPanel("Coverage LUT Tool", False)
         }
 
     def save_editor_state(self):
@@ -334,6 +338,15 @@ class Editor:
         self.m_profiler.active = True
         self.m_profiler.build_ui(imgui, implot)
         panel.state = self.m_profiler.active
+
+    def build_coverage_lut_tool(self, imgui : g.ImguiBuilder):
+        panel = self.m_tools['coverage_lut_tool']
+        if not panel.state:
+            return
+
+        self.m_coverage_lut_tool.active = True
+        self.m_coverage_lut_tool.build_ui(imgui)
+        panel.state = self.m_coverage_lut_tool.active
             
     @property
     def viewports(self):
@@ -374,6 +387,7 @@ class Editor:
         self.build_menu_bar(imgui)
         self.build_view_settings_panel(imgui)
         self.build_profiler(imgui, implot)
+        self.build_coverage_lut_tool(imgui)
         viewport_objs = [vo for vo in self.m_viewports.values()]
         for vp in viewport_objs: 
             if not vp.build_ui(imgui):
@@ -395,6 +409,13 @@ class Editor:
             self.m_geo.register_wavefront_obj(self.m_active_scene)
         except Exception as err:
             print ("[Editor]: failed parsing scene, reason: " + str(err))
+
+    def render_tools(self):
+        if not self.m_coverage_lut_tool.active:
+            return
+        self.m_coverage_lut_tool.render()
+
+        
 
         
  
