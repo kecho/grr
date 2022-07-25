@@ -1,5 +1,6 @@
 #include "raster_util.hlsl"
 #include "geometry.hlsl"
+#include "debug_font.hlsl"
 
 #define OVERLAY_FLAGS_NONE 0
 #define OVERLAY_FLAGS_SHOW_COARSE_TILES 1 << 0
@@ -17,7 +18,6 @@ Buffer<uint> g_fineTileCounters : register(t6);
 
 RWTexture2D<float4> g_output : register(u0);
 
-#define FONT_BLOCK_SIZE 16.0
 #define TILE_SIZE 32.0
 #define BORDER_PIXELS 1.0
 #define BORDER_COLOR float4(0.8, 0.8, 0.8, 0.3)
@@ -31,34 +31,6 @@ cbuffer Constants : register(b0)
     float g_binTileY;
     int   g_binCoarseTileSize;
     int   g_overlayFlags;
-}
-
-float4 drawNumber(float2 uv, int digitsCount, int number)
-{
-    if (any(uv < 0.0) || any(uv > 1.0))
-        return float4(0,0,0,0);
-    int leadingZeros = 0;
-    int leadingZN = number;
-    while (leadingZN != 0)
-    {
-        ++leadingZeros;
-        leadingZN /= 10;
-    }
-    leadingZN = digitsCount - leadingZeros;
-    uv.x += (float)leadingZN/(float)digitsCount;
-    if (uv.x > 1.0)
-        return float4(0,0,0,0);
-
-    int currDigit = clamp(digitsCount - (int)(uv.x * digitsCount) - 1.0, 0, digitsCount - 1);
-
-    number /= pow(10, currDigit);
-    uv.x = fmod(uv.x * digitsCount, 1.0);
-    
-    float row = 3.0/FONT_BLOCK_SIZE;
-    float col = float(number % 10)/FONT_BLOCK_SIZE;
-    float2 samplePos = float2(col + uv.x * 1.0/FONT_BLOCK_SIZE, row + uv.y * 1.0/FONT_BLOCK_SIZE);
-    float4 val = g_debugFont.SampleLevel(g_fontSampler, samplePos, 0.0);
-    return float4(val.rgb, val.r > 0.5 ? 1.0 : 0.0) * FONT_COLOR;
 }
 
 float4 drawTile(int2 coord, int tileSize, int tileCount)
@@ -82,8 +54,8 @@ float4 drawTile(int2 coord, int tileSize, int tileCount)
     float4 tileColor = TILE_COLOR;
     if (isFont)
     {
-        float4 fontCol = drawNumber(fontTileUv / fontBlock, numberOfDigits, tileCount);
-        float4 fontColShadow = drawNumber((fontTileUv - 2.0 * 1.5/TILE_SIZE) / fontBlock, numberOfDigits, tileCount);
+        float4 fontCol = Font::drawNumber(g_debugFont, g_fontSampler, fontTileUv / fontBlock, numberOfDigits, tileCount);
+        float4 fontColShadow = Font::drawNumber(g_debugFont, g_fontSampler, (fontTileUv - 2.0 * 1.5/TILE_SIZE) / fontBlock, numberOfDigits, tileCount);
         tileColor.rgba = lerp(tileColor.rgba, float4(0,0,0,1), fontColShadow.a);
         tileColor.rgba = lerp(tileColor.rgba, fontCol.rgba, fontCol.a);
     }
@@ -111,9 +83,9 @@ float4 drawHeatmapLegend(float2 uv, float2 minUv, float2 maxUv)
     float2 quadSizePixels = (maxUv - minUv) * float2(g_dims.xy);
     float2 fontQuad = quadSizePixels/FONT_BLOCK_SIZE;
     
-    float4 beginFont  = drawNumber((txy - float2(0.0 , 0))*fontQuad / float2(2,1), 2, 1);
-    float4 middleFont = drawNumber((txy - float2(0.5 , 0))*fontQuad / float2(3,1), 3, 500) * float4(0.3,0.3,0.3,1.0);
-    float4 endFont    = drawNumber((txy - float2(1.0 - (4 * FONT_BLOCK_SIZE/quadSizePixels.x), 0))*fontQuad / float2(4,1), 4, 1000);
+    float4 beginFont  = Font::drawNumber(g_debugFont, g_fontSampler, (txy - float2(0.0 , 0))*fontQuad / float2(2,1), 2, 1);
+    float4 middleFont = Font::drawNumber(g_debugFont, g_fontSampler, (txy - float2(0.5 , 0))*fontQuad / float2(3,1), 3, 500) * float4(0.3,0.3,0.3,1.0);
+    float4 endFont    = Font::drawNumber(g_debugFont, g_fontSampler, (txy - float2(1.0 - (4 * FONT_BLOCK_SIZE/quadSizePixels.x), 0))*fontQuad / float2(4,1), 4, 1000);
     float4 fontCol = float4(0,0,0,0);
     fontCol = lerp(fontCol, beginFont,  beginFont.a);
     fontCol = lerp(fontCol, middleFont, middleFont.a);

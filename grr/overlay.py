@@ -1,6 +1,7 @@
 import coalpy.gpu as g
 import math
 from . import raster
+from . import debug_font
 
 #enums, must match those in debug_cs.hlsl
 class OverlayFlags:
@@ -9,9 +10,7 @@ class OverlayFlags:
     SHOW_FINE_TILES = 1 << 1
 
 #font stuff
-g_font_sampler = g.Sampler(filter_type = g.FilterType.Linear)
 g_overlay_shader = g.Shader(file = "overlay_cs.hlsl", name = "main_overlay", main_function = "csMainOverlay")
-g_debug_font_texture = g.Texture(file = "data/debug_font.jpg")
 
 def render_overlay(cmd_list, rasterizer, output_texture, view_settings):
     w = view_settings.width
@@ -33,7 +32,7 @@ def render_overlay(cmd_list, rasterizer, output_texture, view_settings):
         ],
 
         inputs = [
-            g_debug_font_texture,
+            debug_font.font_texture,
             rasterizer.visibility_buffer,
             rasterizer.m_total_records_buffer,
             rasterizer.m_bin_counter_buffer,
@@ -41,7 +40,7 @@ def render_overlay(cmd_list, rasterizer, output_texture, view_settings):
             rasterizer.m_bin_record_buffer,
             rasterizer.m_fine_tile_counter_buffer],
 
-        samplers = g_font_sampler,
+        samplers = debug_font.font_sampler,
 
         outputs = output_texture,
         x = math.ceil(w / 8),
