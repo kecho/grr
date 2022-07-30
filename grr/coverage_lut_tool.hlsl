@@ -78,6 +78,16 @@ float3 drawLine(float3 col, float2 v0, float2 v1, float2 uv)
     return col;
 }
 
+float3 drawBaseMask(float3 col, uint offset, uint mask, float2 uv)
+{
+    float2 gridUV = getGridUV(uv);
+    float d = distance(gridUV, float2(0.5,0.5));
+    if (d > 0.1)
+        return col;
+
+    return float3(0.0,0.0,0.1);
+}
+
 [numthreads(8,8,1)]
 void csMain(
     uint2 dispatchThreadID : SV_DispatchThreadID)
@@ -103,6 +113,7 @@ void csMain(
         uint2 mask = uint2(0, 1251512);
         float4 gridCol = drawGrid(boardUv, mask);
         color = lerp(color, gridCol.rgb, saturate(gridCol.a));
+        color = drawBaseMask(color, 0, 0, boardUv);
     }
 
     g_output[pixelCoord] = float4(color, 1.0);
