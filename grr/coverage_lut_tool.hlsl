@@ -22,6 +22,58 @@ struct InputTri
     }
 };
 
+struct LineBaseMask
+{
+    int offset; //offset is 1st int y coord of ys
+    uint mask; //corresponds to increment 
+    
+    //begin points, relative to grid
+    float2 i0;
+    float2 i1;
+
+    void init(float2 v0, float2 v1)
+    {
+        //line equation: f(x): a * x + b;
+        // where a = (v1.y - v0.y)/(v1.x - v0.x)
+        float2 l = v1 - v0;
+        float a = l.y/l.x;
+        float b = v1.y - a * v1.x;
+
+        // Xs values of 5 points
+        const float4 xs = (float4(0,1,2,3) + 0.5)/8.0;
+        const float xs4 = 4.5/8.0;
+
+        // Ys values of 5 points, and also  their uint counterparts
+        float4 ys = xs  * a + b;
+        float ys4 = xs4 * a + b;
+
+        int4 ysi = (int4)floor(ys * 8.0);
+        int ysi4 = (int) floor(ys4 * 8.0);
+
+        // Incremental mask
+        uint4 dysmask = uint4(ysi.yzw,ysi4) - ysi.xyzw;
+
+        // Debug points
+        i0 = float2(xs.x, (ysi.x + 0.5)/8.0);
+        i1 = float2(xs4,  (ysi4 + 0.5)/8.0);
+
+        // Final output, offset and mask
+        offset = ysi.x;
+        mask = dysmask.x | (dysmask.y << 1) | (dysmask.z << 2) | (dysmask.w << 3);
+    }
+
+    float2 origin()
+    {
+        return float2(0.5, (float)offset + 0.5) * (1.0/8.0);
+    }
+
+    float2 getPoint(uint i)
+    {
+        int yval = offset + (int)countbits(((1u << i) - 1) & mask);
+        return float2(i + 0.5, yval + 0.5) * 1.0/8.0;
+    }
+};
+
 SamplerState g_fontSampler : register(s0);
 Texture2D<float4> g_fontTexture : register(t0);
 RWTexture2D<float4> g_output : register(u0);
@@ -78,10 +130,10 @@ float3 drawLine(float3 col, float2 v0, float2 v1, float2 uv)
     return col;
 }
 
-float3 drawBaseMask(float3 col, uint offset, uint mask, float2 uv)
+float3 drawBaseMask(float3 col, in LineBaseMask lineBaseMask, uint i, float2 uv)
 {
     float2 gridUV = getGridUV(uv);
-    float d = distance(gridUV, float2(0.5,0.5));
+    float d = distance(gridUV, lineBaseMask.getPoint(i) * 8.0);
     if (d > 0.1)
         return col;
 
@@ -108,12 +160,23 @@ void csMain(
     color = drawVertex(color, tri.v1, screenUv);
     color = drawVertex(color, tri.v2, screenUv);
 
+    //make all uv coordinates relative to board
+    tri.v0 -= boardOffset;
+    tri.v1 -= boardOffset;
+    tri.v2 -= boardOffset;
+
     if (all(boardUv >= 0.0) && all(boardUv <= 1.0))
     {
         uint2 mask = uint2(0, 1251512);
         float4 gridCol = drawGrid(boardUv, mask);
         color = lerp(color, gridCol.rgb, saturate(gridCol.a));
-        color = drawBaseMask(color, 0, 0, boardUv);
+        
+        LineBaseMask lineMask;
+        lineMask.init(tri.v0, tri.v1);
+        for (uint i = 0; i < 4; ++i)
+            color = drawBaseMask(color, lineMask, i, boardUv);
+        color = drawVertex(color, lineMask.i0, boardUv);
+        color = drawVertex(color, lineMask.i1, boardUv);
     }
 
     g_output[pixelCoord] = float4(color, 1.0);
