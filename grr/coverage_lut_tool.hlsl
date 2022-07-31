@@ -41,6 +41,32 @@ struct LineData
         i1 = float2(7.5/8.0, eval(7.5/8.0)); 
     }
 
+    void buildCompressed(float2 v0, float2 v1, out bool outFlipX, out bool outFlipY)
+    {
+        //build line with flip bits for lookup compression
+        //This line will have a slope between 0 and 0.5, and always positive.
+        //We output the flips as bools
+
+        float2 ll = v1 - v0;
+        outFlipX = sign(ll.y) != sign(ll.x);
+        outFlipY = abs(ll.y) > abs(ll.x);
+        a = (outFlipY ? ll.x/ll.y : ll.y/ll.x);
+        if (outFlipX)
+        {
+            v0.x = 1.0 - v0.x;
+            v1.x = 1.0 - v1.x;
+            a *= -1;
+        }
+
+        if (outFlipY)
+        {
+            v0.y = 1.0 - v0.y;
+            v1.y = 1.0 - v1.y;
+        }
+
+        b = v1.y - a * v1.x;
+    }
+
     float eval(float xval)
     {
         return xval * a + b;
@@ -58,6 +84,7 @@ struct LineBaseMask
     uint masks[2]; //corresponds to increment 
     LineData debugLine;
     bool flipX;
+    bool flipY;
 
     float2 getPoint(uint i)
     {
@@ -67,6 +94,8 @@ struct LineBaseMask
         float2 v = float2(i + 0.5, yval + 0.5) * 1.0/8.0;
         if (flipX)
             v.x = 1.0 - v.x;
+        if (flipY)
+            v.y = 1.0 - v.y;
         return v;
     }
     
@@ -77,23 +106,8 @@ struct LineBaseMask
         //line debug data
         data.debugLine.build(v0, v1);
 
-        LineData l = (LineData)0;
-        {
-            float2 ll = v1 - v0;
-            data.flipX = sign(ll.y) != sign(ll.x);
-            if (data.flipX)
-            {
-                v0.x = 1.0 - v0.x;
-                v1.x = 1.0 - v1.x;
-                l.a = -ll.y/ll.x;
-            }
-            else
-            {
-                l.a = ll.y/ll.x;
-            }
-
-            l.b = v1.y - l.a * v1.x;
-        }
+        LineData l;
+        l.buildCompressed(v0, v1, data.flipX, data.flipY);
 
         // Xs values of 5 points
         const float4 xs = (float4(0,1,2,3) + 0.5)/8.0;
@@ -107,7 +121,7 @@ struct LineBaseMask
         int ysi4 = (int) floor(ys4 * 8.0);
 
         // Incremental mask
-        uint4 dysmask = uint4(ysi.yzw,ysi4) - ysi.xyzw;
+        uint4 dysmask = uint4(ysi.yzw, ysi4) - ysi.xyzw;
 
         // Final output, offset and mask
         data.offsets[0] = ysi.x;
@@ -224,7 +238,6 @@ void csMain(
         color = lerp(color, gridCol.rgb, saturate(gridCol.a));
         
         LineBaseMask lineMask = LineBaseMask::create(tri.v0, tri.v1);
-        if (abs(lineMask.debugLine.a) < 0.5)
         {
             for (uint i = 0; i < 8; ++i)
                 color = drawBaseMask(color, lineMask, i, boardUv);
