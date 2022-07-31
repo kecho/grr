@@ -40,27 +40,28 @@ struct LineData
         i1 = float2(7.5/8.0, eval(7.5/8.0)); 
     }
 
-    void buildCompressed(float2 v0, float2 v1, out bool outFlipX, out bool outFlipY)
+    void buildCompressed(float2 v0, float2 v1, out bool outFlipX, out bool outFlipAxis)
     {
         //build line with flip bits for lookup compression
         //This line will have a slope between 0 and 0.5, and always positive.
         //We output the flips as bools
 
         float2 ll = v1 - v0;
+        outFlipAxis = abs(ll.y) > abs(ll.x);
+        if (outFlipAxis)
+        {
+            ll.xy = ll.yx;
+            v0.xy = v0.yx;
+            v1.xy = v1.yx;
+        }
+
         outFlipX = sign(ll.y) != sign(ll.x);
-        outFlipY = abs(ll.y) > abs(ll.x);
-        a = (outFlipY ? ll.x/ll.y : ll.y/ll.x);
+        a = ll.y/ll.x;
         if (outFlipX)
         {
             v0.x = 1.0 - v0.x;
             v1.x = 1.0 - v1.x;
             a *= -1;
-        }
-
-        if (outFlipY)
-        {
-            v0.y = 1.0 - v0.y;
-            v1.y = 1.0 - v1.y;
         }
 
         b = v1.y - a * v1.x;
@@ -85,7 +86,7 @@ struct LineBaseMask
     uint masks[2]; //corresponds to increment 
     LineData debugLine;
     bool flipX;
-    bool flipY;
+    bool flipAxis;
 
     float2 getPoint(uint i)
     {
@@ -95,8 +96,11 @@ struct LineBaseMask
         float2 v = float2(i + 0.5, yval + 0.5) * 1.0/8.0;
         if (flipX)
             v.x = 1.0 - v.x;
-        if (flipY)
-            v.y = 1.0 - v.y;
+        if (flipAxis)
+        {
+            float2 tmp = v;
+            v.xy = tmp.yx;
+        }
         return v;
     }
     
@@ -107,8 +111,8 @@ struct LineBaseMask
         //line debug data
         data.debugLine.build(v0, v1);
 
-        LineData l;
-        l.buildCompressed(v0, v1, data.flipX, data.flipY);
+        LineData l = (LineData)0;
+        l.buildCompressed(v0, v1, data.flipX, data.flipAxis);
 
         // Xs values of 5 points
         const float4 xs = (float4(0,1,2,3) + 0.5)/8.0;
