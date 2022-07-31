@@ -22,30 +22,86 @@ struct InputTri
     }
 };
 
-struct LineBaseMask
+struct LineData
 {
-    int offset; //offset is 1st int y coord of ys
-    uint mask; //corresponds to increment 
-    
-    //begin points, relative to grid
+    float a;
+    float b;
     float2 i0;
     float2 i1;
 
-    void init(float2 v0, float2 v1)
+    void build(float2 v0, float2 v1)
     {
         //line equation: f(x): a * x + b;
         // where a = (v1.y - v0.y)/(v1.x - v0.x)
         float2 l = v1 - v0;
-        float a = l.y/l.x;
-        float b = v1.y - a * v1.x;
+        a = l.y/l.x;
+        b = v1.y - a * v1.x;
+
+        i0 = float2(0.5/8.0, eval(0.5/8.0)); 
+        i1 = float2(7.5/8.0, eval(7.5/8.0)); 
+    }
+
+    float eval(float xval)
+    {
+        return xval * a + b;
+    }
+
+    float4 eval4(float4 xvals)
+    {
+        return xvals * a + b;
+    }
+};
+
+struct LineBaseMask
+{
+    int offsets[2]; //offset is 1st int y coord of ys
+    uint masks[2]; //corresponds to increment 
+    LineData debugLine;
+    bool flipX;
+
+    float2 getPoint(uint i)
+    {
+        int j = i & 0x3;
+        int m = i >> 2;
+        int yval = offsets[m] + (int)countbits(((1u << j) - 1) & masks[m]);
+        float2 v = float2(i + 0.5, yval + 0.5) * 1.0/8.0;
+        if (flipX)
+            v.x = 1.0 - v.x;
+        return v;
+    }
+    
+    static LineBaseMask create(float2 v0, float2 v1)
+    {
+        LineBaseMask data;
+
+        //line debug data
+        data.debugLine.build(v0, v1);
+
+        LineData l = (LineData)0;
+        {
+            float2 ll = v1 - v0;
+            data.flipX = sign(ll.y) != sign(ll.x);
+            if (data.flipX)
+            {
+                v0.x = 1.0 - v0.x;
+                v1.x = 1.0 - v1.x;
+                l.a = -ll.y/ll.x;
+            }
+            else
+            {
+                l.a = ll.y/ll.x;
+            }
+
+            l.b = v1.y - l.a * v1.x;
+        }
 
         // Xs values of 5 points
         const float4 xs = (float4(0,1,2,3) + 0.5)/8.0;
         const float xs4 = 4.5/8.0;
 
         // Ys values of 5 points, and also  their uint counterparts
-        float4 ys = xs  * a + b;
-        float ys4 = xs4 * a + b;
+        float4 ys = l.eval4(xs);
+        float ys4 = l.eval(xs4);
 
         int4 ysi = (int4)floor(ys * 8.0);
         int ysi4 = (int) floor(ys4 * 8.0);
@@ -53,24 +109,20 @@ struct LineBaseMask
         // Incremental mask
         uint4 dysmask = uint4(ysi.yzw,ysi4) - ysi.xyzw;
 
-        // Debug points
-        i0 = float2(xs.x, (ysi.x + 0.5)/8.0);
-        i1 = float2(xs4,  (ysi4 + 0.5)/8.0);
-
         // Final output, offset and mask
-        offset = ysi.x;
-        mask = dysmask.x | (dysmask.y << 1) | (dysmask.z << 2) | (dysmask.w << 3);
-    }
+        data.offsets[0] = ysi.x;
+        data.masks[0] = dysmask.x | (dysmask.y << 1) | (dysmask.z << 2) | (dysmask.w << 3);
 
-    float2 origin()
-    {
-        return float2(0.5, (float)offset + 0.5) * (1.0/8.0);
-    }
+        //Second mask
+        ys = l.eval4(xs + 4.0/8.0);
+        ys4 = l.eval(8.5/8.0);
+        ysi = (int4)floor(ys * 8.0);
+        ysi4 = (int) floor(ys4 * 8.0);
+        dysmask = uint4(ysi.yzw,ysi4) - ysi.xyzw;
 
-    float2 getPoint(uint i)
-    {
-        int yval = offset + (int)countbits(((1u << i) - 1) & mask);
-        return float2(i + 0.5, yval + 0.5) * 1.0/8.0;
+        data.offsets[1] = countbits(data.masks[0]) + data.offsets[0];
+        data.masks[1] = dysmask.x | (dysmask.y << 1) | (dysmask.z << 2) | (dysmask.w << 3);
+        return data;
     }
 };
 
@@ -171,12 +223,14 @@ void csMain(
         float4 gridCol = drawGrid(boardUv, mask);
         color = lerp(color, gridCol.rgb, saturate(gridCol.a));
         
-        LineBaseMask lineMask;
-        lineMask.init(tri.v0, tri.v1);
-        for (uint i = 0; i < 4; ++i)
-            color = drawBaseMask(color, lineMask, i, boardUv);
-        color = drawVertex(color, lineMask.i0, boardUv);
-        color = drawVertex(color, lineMask.i1, boardUv);
+        LineBaseMask lineMask = LineBaseMask::create(tri.v0, tri.v1);
+        if (abs(lineMask.debugLine.a) < 0.5)
+        {
+            for (uint i = 0; i < 8; ++i)
+                color = drawBaseMask(color, lineMask, i, boardUv);
+        }
+        color = drawVertex(color, lineMask.debugLine.i0, boardUv);
+        color = drawVertex(color, lineMask.debugLine.i1, boardUv);
     }
 
     g_output[pixelCoord] = float4(color, 1.0);
