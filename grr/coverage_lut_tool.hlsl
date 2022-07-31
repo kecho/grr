@@ -36,7 +36,6 @@ struct LineData
         float2 l = v1 - v0;
         a = l.y/l.x;
         b = v1.y - a * v1.x;
-
         i0 = float2(0.5/8.0, eval(0.5/8.0)); 
         i1 = float2(7.5/8.0, eval(7.5/8.0)); 
     }
@@ -65,6 +64,8 @@ struct LineData
         }
 
         b = v1.y - a * v1.x;
+        i0 = float2(0.5/8.0, eval(0.5/8.0)); 
+        i1 = float2(7.5/8.0, eval(7.5/8.0)); 
     }
 
     float eval(float xval)
@@ -149,7 +150,7 @@ float2 getGridUV(float2 uv)
     return uv * 8.0;
 }
 
-float4 drawGrid(float2 uv, uint2 bitMask)
+float4 drawGrid(float2 uv)
 {
     float2 gridUV = getGridUV(uv);
     int2 gridCoord = (int2)gridUV;
@@ -163,11 +164,6 @@ float4 drawGrid(float2 uv, uint2 bitMask)
     float4 col = ((gridCoord.x + (gridCoord.y & 0x1)) & 0x1) ? float4(1,1,1,0.4) : float4(0.5,0.5,0.5,0.4);
 
     col.rgb += numCol.rgb * numCol.a;
-    int bitVal =  ((gridIndex >= 32) ? (bitMask.x >> (gridIndex - 32)) : (bitMask.y >> gridIndex)) & 0x1; 
-    if (bitVal)
-    {
-        col = lerp(col, float4(0.6, 0, 0, 1), length(gridUV * 2.0 - 1.0) < 0.4 ? 1.0 : 0.0);
-    }
 
     return col;
 }
@@ -220,11 +216,11 @@ void csMain(
     InputTri tri;
     tri.load();
     color = drawLine(color, tri.v0, tri.v1, screenUv);
-    color = drawLine(color, tri.v1, tri.v2, screenUv);
-    color = drawLine(color, tri.v2, tri.v0, screenUv);
+    //color = drawLine(color, tri.v1, tri.v2, screenUv);
+    //color = drawLine(color, tri.v2, tri.v0, screenUv);
     color = drawVertex(color, tri.v0, screenUv);
     color = drawVertex(color, tri.v1, screenUv);
-    color = drawVertex(color, tri.v2, screenUv);
+    //color = drawVertex(color, tri.v2, screenUv);
 
     //make all uv coordinates relative to board
     tri.v0 -= boardOffset;
@@ -234,7 +230,7 @@ void csMain(
     if (all(boardUv >= 0.0) && all(boardUv <= 1.0))
     {
         uint2 mask = uint2(0, 1251512);
-        float4 gridCol = drawGrid(boardUv, mask);
+        float4 gridCol = drawGrid(boardUv);
         color = lerp(color, gridCol.rgb, saturate(gridCol.a));
         
         LineBaseMask lineMask = LineBaseMask::create(tri.v0, tri.v1);
