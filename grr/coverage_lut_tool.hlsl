@@ -114,33 +114,26 @@ struct LineBaseMask
         LineData l = (LineData)0;
         l.buildCompressed(v0, v1, data.flipX, data.flipAxis);
 
-        // Xs values of 5 points
-        const float4 xs = (float4(0,1,2,3) + 0.5)/8.0;
-        const float xs4 = 4.5/8.0;
+        // Xs values of 8 points
+        const float4 xs0 = float4(0.5,1.5,2.5,3.5)/8.0;
+        const float4 xs1 = float4(4.5,5.5,6.5,7.5)/8.0;
 
-        // Ys values of 5 points, and also  their uint counterparts
-        float4 ys = l.eval4(xs);
-        float ys4 = l.eval(xs4);
+        // Ys values of 8 points
+        float4 ys0 = l.eval4(xs0);
+        float4 ys1 = l.eval4(xs1);
 
-        int4 ysi = (int4)floor(ys * 8.0);
-        int ysi4 = (int) floor(ys4 * 8.0);
+        int4 ysi0 = (int4)floor(ys0 * 8.0);
+        int4 ysi1 = (int4)floor(ys1 * 8.0);
 
-        // Incremental mask
-        uint4 dysmask = uint4(ysi.yzw, ysi4) - ysi.xyzw;
+        // Incremental masks
+        uint4 dysmask0 = uint4(ysi0.yzw, ysi1.x) - ysi0.xyzw;
+        uint4 dysmask1 = uint4(ysi1.yzw, 0) - uint4(ysi1.xyz, 0);
 
         // Final output, offset and mask
-        data.offsets[0] = ysi.x;
-        data.masks[0] = dysmask.x | (dysmask.y << 1) | (dysmask.z << 2) | (dysmask.w << 3);
-
-        //Second mask
-        ys = l.eval4(xs + 4.0/8.0);
-        ys4 = l.eval(8.5/8.0);
-        ysi = (int4)floor(ys * 8.0);
-        ysi4 = (int) floor(ys4 * 8.0);
-        dysmask = uint4(ysi.yzw,ysi4) - ysi.xyzw;
-
+        data.offsets[0] = ysi0.x;
+        data.masks[0] = dysmask0.x | (dysmask0.y << 1) | (dysmask0.z << 2) | (dysmask0.w << 3);
         data.offsets[1] = countbits(data.masks[0]) + data.offsets[0];
-        data.masks[1] = dysmask.x | (dysmask.y << 1) | (dysmask.z << 2) | (dysmask.w << 3);
+        data.masks[1] = dysmask1.x | (dysmask1.y << 1) | (dysmask1.z << 2) | (dysmask1.w << 3);
         return data;
     }
 };
