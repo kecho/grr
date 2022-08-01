@@ -1,4 +1,5 @@
 #include "debug_font.hlsl"
+#include "coverage.hlsl"
 
 cbuffer Constants : register(b0)
 {
@@ -19,122 +20,6 @@ struct InputTri
         v0 = g_packedTri0.xy * aspect;    
         v1 = g_packedTri0.zw * aspect;    
         v2 = g_packedTri1.xy * aspect;    
-    }
-};
-
-struct LineData
-{
-    float a;
-    float b;
-    float2 i0;
-    float2 i1;
-
-    void build(float2 v0, float2 v1)
-    {
-        //line equation: f(x): a * x + b;
-        // where a = (v1.y - v0.y)/(v1.x - v0.x)
-        float2 l = v1 - v0;
-        a = l.y/l.x;
-        b = v1.y - a * v1.x;
-        i0 = float2(0.5/8.0, eval(0.5/8.0)); 
-        i1 = float2(7.5/8.0, eval(7.5/8.0)); 
-    }
-
-    void buildCompressed(float2 v0, float2 v1, out bool outFlipX, out bool outFlipAxis)
-    {
-        //build line with flip bits for lookup compression
-        //This line will have a slope between 0 and 0.5, and always positive.
-        //We output the flips as bools
-
-        float2 ll = v1 - v0;
-        outFlipAxis = abs(ll.y) > abs(ll.x);
-        if (outFlipAxis)
-        {
-            ll.xy = ll.yx;
-            v0.xy = v0.yx;
-            v1.xy = v1.yx;
-        }
-
-        outFlipX = sign(ll.y) != sign(ll.x);
-        a = ll.y/ll.x;
-        if (outFlipX)
-        {
-            v0.x = 1.0 - v0.x;
-            v1.x = 1.0 - v1.x;
-            a *= -1;
-        }
-
-        b = v1.y - a * v1.x;
-        i0 = float2(0.5/8.0, eval(0.5/8.0)); 
-        i1 = float2(7.5/8.0, eval(7.5/8.0)); 
-    }
-
-    float eval(float xval)
-    {
-        return xval * a + b;
-    }
-
-    float4 eval4(float4 xvals)
-    {
-        return xvals * a + b;
-    }
-};
-
-struct LineBaseMask
-{
-    int offsets[2]; //offset is 1st int y coord of ys
-    uint masks[2]; //corresponds to increment 
-    LineData debugLine;
-    bool flipX;
-    bool flipAxis;
-
-    float2 getPoint(uint i)
-    {
-        int j = i & 0x3;
-        int m = i >> 2;
-        int yval = offsets[m] + (int)countbits(((1u << j) - 1) & masks[m]);
-        float2 v = float2(i + 0.5, yval + 0.5) * 1.0/8.0;
-        if (flipX)
-            v.x = 1.0 - v.x;
-        if (flipAxis)
-        {
-            float2 tmp = v;
-            v.xy = tmp.yx;
-        }
-        return v;
-    }
-    
-    static LineBaseMask create(float2 v0, float2 v1)
-    {
-        LineBaseMask data;
-
-        //line debug data
-        data.debugLine.build(v0, v1);
-
-        LineData l = (LineData)0;
-        l.buildCompressed(v0, v1, data.flipX, data.flipAxis);
-
-        // Xs values of 8 points
-        const float4 xs0 = float4(0.5,1.5,2.5,3.5)/8.0;
-        const float4 xs1 = float4(4.5,5.5,6.5,7.5)/8.0;
-
-        // Ys values of 8 points
-        float4 ys0 = l.eval4(xs0);
-        float4 ys1 = l.eval4(xs1);
-
-        int4 ysi0 = (int4)floor(ys0 * 8.0);
-        int4 ysi1 = (int4)floor(ys1 * 8.0);
-
-        // Incremental masks
-        uint4 dysmask0 = uint4(ysi0.yzw, ysi1.x) - ysi0.xyzw;
-        uint4 dysmask1 = uint4(ysi1.yzw, 0) - uint4(ysi1.xyz, 0);
-
-        // Final output, offset and mask
-        data.offsets[0] = ysi0.x;
-        data.masks[0] = dysmask0.x | (dysmask0.y << 1) | (dysmask0.z << 2) | (dysmask0.w << 3);
-        data.offsets[1] = countbits(data.masks[0]) + data.offsets[0];
-        data.masks[1] = dysmask1.x | (dysmask1.y << 1) | (dysmask1.z << 2) | (dysmask1.w << 3);
-        return data;
     }
 };
 
@@ -189,20 +74,42 @@ float3 drawLine(float3 col, float2 v0, float2 v1, float2 uv)
     return col;
 }
 
-float3 drawBaseMask(float3 col, in LineBaseMask lineBaseMask, uint i, float2 uv)
+float3 drawBaseMask(float3 col, in coverage::LineArea lineArea, uint i, float2 uv)
 {
     float2 gridUV = getGridUV(uv);
-    float d = distance(gridUV, lineBaseMask.getPoint(i) * 8.0);
+    float d = distance(gridUV, lineArea.getBoundaryPoint(i) * 8.0);
     if (d > 0.1)
         return col;
 
     return float3(0.0,0.0,0.1);
 }
 
+float3 drawCoverageMask(float3 col, uint2 coverageMask, float2 uv)
+{
+    float2 gridUV = getGridUV(uv);
+    int2 gridCoord = (int2)floor(gridUV);
+    int gridCellId = gridCoord.y * 8 + gridCoord.x;
+    uint shift = gridCellId & 0x1F;
+    if ((1u << shift) & (gridCellId < 32 ? coverageMask.x : coverageMask.y))
+    {
+        float2 cellUv = frac(gridUV);
+        float d = distance(float2(0.5,0.5), cellUv);
+        if (d < 0.1)
+            return float3(0.0,0.1,0.7);
+    }
+
+    return col;
+}
+
 [numthreads(8,8,1)]
 void csMain(
-    uint2 dispatchThreadID : SV_DispatchThreadID)
+    uint2 dispatchThreadID : SV_DispatchThreadID,
+    uint groupThreadIndex : SV_GroupIndex)
 {
+    coverage::init(groupThreadIndex);
+
+    GroupMemoryBarrierWithGroupSync();
+
     uint2 pixelCoord = dispatchThreadID.xy;
     float aspect = g_size.x * g_size.w;
     float2 screenUv = float2(pixelCoord) * g_size.zw * float2(aspect, 1.0);
@@ -230,13 +137,14 @@ void csMain(
         float4 gridCol = drawGrid(boardUv);
         color = lerp(color, gridCol.rgb, saturate(gridCol.a));
         
-        LineBaseMask lineMask = LineBaseMask::create(tri.v0, tri.v1);
+        coverage::LineArea lineArea = coverage::LineArea::create(tri.v0, tri.v1);
         {
             for (uint i = 0; i < 8; ++i)
-                color = drawBaseMask(color, lineMask, i, boardUv);
+                color = drawBaseMask(color, lineArea, i, boardUv);
         }
-        color = drawVertex(color, lineMask.debugLine.i0, boardUv);
-        color = drawVertex(color, lineMask.debugLine.i1, boardUv);
+        color = drawCoverageMask(color, coverage::combineQuads(uint4(coverage::gs_quadMask[lineArea.masks[0]],0,0,0)), boardUv);
+        color = drawVertex(color, lineArea.debugLine.pointAt(0.5/8.0), boardUv);
+        color = drawVertex(color, lineArea.debugLine.pointAt(7.5/8.0), boardUv);
     }
 
     g_output[pixelCoord] = float4(color, 1.0);
