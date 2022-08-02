@@ -6,6 +6,7 @@ namespace coverage
 {
 
 //lut for 4x4 quad mask. See buildQuadMask function
+// 2 states for horizontal flipping
 groupshared uint gs_quadMask[16]; 
 
 // buildQuadMask
@@ -39,28 +40,35 @@ uint buildQuadMask(uint incrementMask)
     return c;
 }
 
+//flip 4 bit nibble
+uint flipNibble(uint mask, int offset)
+{
+    mask = (mask >> offset) & 0xF;
+    uint r = ((mask << 3) & 0x8)
+           | ((mask << 1) & 0x4)
+           | ((mask >> 1) & 0x2)
+           | ((mask >> 3) & 0x1);
+    return (r << offset);
+}
+
+//flip an entire 4x4 bit quad
+uint flipQuadInX(uint mask)
+{
+    return flipNibble(mask, 0) | flipNibble(mask, 4) | flipNibble(mask, 8) | flipNibble(mask, 12);
+}
+
 // Builds all the luts necessary for fast bit based coverage
 void init(uint groupThreadIndex)
 {
+    // Neutral
     if (groupThreadIndex < 16)
         gs_quadMask[groupThreadIndex] = buildQuadMask(groupThreadIndex);
-}
 
-// takes as an input 4 packed quads of an 8x8 grid.
-// Places them on a 8x8 grid. The final output is an 8x8 grid
-// packed in 2 uints.
-uint2 combineQuads(uint4 q)
-{
-    uint2 c = 0;
-    c.x |= ((q.x & 0xF) | ((q.y & 0xF) << 4)) << 0;
-    c.x |= (((q.x >> 4 ) & 0xF) | (((q.y >> 4 ) & 0xF) << 4)) << 8;
-    c.x |= (((q.x >> 8 ) & 0xF) | (((q.y >> 8 ) & 0xF) << 4)) << 16;
-    c.x |= (((q.x >> 12) & 0xF) | (((q.y >> 12) & 0xF) << 4)) << 24;
-    c.y |= ((q.z & 0xF) | ((q.w & 0xF) << 4)) << 0;
-    c.y |= (((q.z >> 4 ) & 0xF) | (((q.w >> 4 ) & 0xF) << 4)) << 8;
-    c.y |= (((q.z >> 8 ) & 0xF) | (((q.w >> 8 ) & 0xF) << 4)) << 16;
-    c.y |= (((q.z >> 12) & 0xF) | (((q.w >> 12) & 0xF) << 4)) << 24;
-    return c;
+    GroupMemoryBarrierWithGroupSync();
+
+    // Flip in X axis
+    if (groupThreadIndex < 16)
+        gs_quadMask[groupThreadIndex + 16] = flipQuadInX(gs_quadMask[groupThreadIndex]);
 }
 
 // Represents a 2D analytical line.
@@ -196,6 +204,66 @@ struct LineArea
         return data;
     }
 };
+
+uint2 createCoverageMask(in LineArea lineArea)
+{
+    int offsets[2];
+    uint masks[2];
+    if (lineArea.flipX)
+    {
+        offsets[0] = lineArea.offsets[1];
+        offsets[1] = lineArea.offsets[0];
+        masks[0] = lineArea.masks[1];
+        masks[1] = lineArea.masks[0];
+    }
+    else
+    {
+        offsets = lineArea.offsets;
+        masks = lineArea.masks;
+    }
+
+    uint halfs[2];
+    uint maskOffset = (lineArea.flipX ? 1 : 0) * 16;
+
+    [unroll]
+    for (int hi = 0; hi < 2; ++hi)
+    {
+        uint quad = gs_quadMask[masks[hi] + maskOffset];
+        int o = offsets[hi];
+        int downShift = max(0, -o);
+        quad >>= (downShift << 2);
+        int upShift = max(o << 2, 0);
+        uint halfV = 0xFFFFFFFF;
+        if (upShift < 32)
+        {
+            halfV = (1u << upShift) - 1u;
+            halfV |= ((quad >> 0 ) & 0xF) << (upShift + 0);
+            halfV |= ((quad >> 4 ) & 0xF) << (upShift + 4);
+            halfV |= ((quad >> 8 ) & 0xF) << (upShift + 8);
+            halfV |= ((quad >> 12) & 0xF) << (upShift + 12);
+        }
+        halfs[hi] = halfV;
+    }
+
+    //Producing the coverage mask with the following instruction set:
+    //c.x |= ((halfs[0] >> 0)  & 0xF) << 0;
+    //c.x |= ((halfs[0] >> 4)  & 0xF) << 8;
+    //c.x |= ((halfs[0] >> 8)  & 0xF) << 16;
+    //c.x |= ((halfs[0] >> 12) & 0xF) << 24;
+    //c.y |= ((halfs[0] >> 16) & 0xF) << 0;
+    //c.y |= ((halfs[0] >> 20) & 0xF) << 8;
+    //c.y |= ((halfs[0] >> 24) & 0xF) << 16;
+    //c.y |= ((halfs[0] >> 28) & 0xF) << 24;
+    uint2 c = 0;
+    for (uint r = 0; r < 4; ++r)
+    {
+        int a = r << 2;
+        int b = r << 3;
+        c.x |= (((halfs[0] >> (a +  0)) & 0xF) | (((halfs[1] >> (a +  0)) & 0xF) << 4)) << b;
+        c.y |= (((halfs[0] >> (a + 16)) & 0xF) | (((halfs[1] >> (a + 16)) & 0xF) << 4))<< b;
+    }
+    return c;
+}
 
 }
 

@@ -142,7 +142,7 @@ void csMain(
             for (uint i = 0; i < 8; ++i)
                 color = drawBaseMask(color, lineArea, i, boardUv);
         }
-        color = drawCoverageMask(color, coverage::combineQuads(uint4(coverage::gs_quadMask[lineArea.masks[0]],0,0,0)), boardUv);
+        color = drawCoverageMask(color, coverage::createCoverageMask(lineArea), boardUv);
         color = drawVertex(color, lineArea.debugLine.pointAt(0.5/8.0), boardUv);
         color = drawVertex(color, lineArea.debugLine.pointAt(7.5/8.0), boardUv);
     }
