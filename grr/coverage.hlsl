@@ -7,7 +7,7 @@ namespace coverage
 
 //lut for 4x4 quad mask. See buildQuadMask function
 // 2 states for horizontal flipping
-groupshared uint gs_quadMask[16]; 
+groupshared uint gs_quadMask[16 * 2]; 
 
 // buildQuadMask
 //Function that builds a 4x4 compact bit quad for line coverage.
@@ -29,7 +29,7 @@ uint buildQuadMask(uint incrementMask)
     uint mask = 0xF;
     for (int r = 0; r < 4; ++r)
     {
-        c |= mask << (r << 2);
+        c |= mask << (r * 8);
         if (incrementMask == 0)
             break;
         int b = firstbitlow(incrementMask);
@@ -54,7 +54,7 @@ uint flipNibble(uint mask, int offset)
 //flip an entire 4x4 bit quad
 uint flipQuadInX(uint mask)
 {
-    return flipNibble(mask, 0) | flipNibble(mask, 4) | flipNibble(mask, 8) | flipNibble(mask, 12);
+    return flipNibble(mask, 0) | flipNibble(mask, 8) | flipNibble(mask, 16) | flipNibble(mask, 24);
 }
 
 // Builds all the luts necessary for fast bit based coverage
@@ -189,8 +189,8 @@ struct LineArea
         float4 ys0 = l.eval4(xs0);
         float4 ys1 = l.eval4(xs1);
 
-        int4 ysi0 = (int4)floor(ys0 * 8.0);
-        int4 ysi1 = (int4)floor(ys1 * 8.0);
+        int4 ysi0 = (int4)floor(ys0 * 8.0 - 0.5);
+        int4 ysi1 = (int4)floor(ys1 * 8.0 - 0.5);
 
         // Incremental masks
         uint4 dysmask0 = uint4(ysi0.yzw, ysi1.x) - ysi0.xyzw;
@@ -203,66 +203,25 @@ struct LineArea
         data.masks[1] = dysmask1.x | (dysmask1.y << 1) | (dysmask1.z << 2) | (dysmask1.w << 3);
         return data;
     }
-};
+} ;
 
 uint2 createCoverageMask(in LineArea lineArea)
 {
-    int offsets[2];
-    uint masks[2];
-    if (lineArea.flipX)
-    {
-        offsets[0] = lineArea.offsets[1];
-        offsets[1] = lineArea.offsets[0];
-        masks[0] = lineArea.masks[1];
-        masks[1] = lineArea.masks[0];
-    }
-    else
-    {
-        offsets = lineArea.offsets;
-        masks = lineArea.masks;
-    }
+    //prepare samples
+    int2 ii = lineArea.flipX ? int2(1,0) : int2(0,1);
+    int2 flipOffset = lineArea.flipX ? int2(16,16) : int2(0,0);
+    uint2 sampledQuads = uint2(gs_quadMask[lineArea.masks[ii.x] + flipOffset.x], gs_quadMask[lineArea.masks[ii.y] + flipOffset.y]);
 
-    uint halfs[2];
-    uint maskOffset = (lineArea.flipX ? 1 : 0) * 16;
+    // generate quad masks
+    int2 offsets = int2(lineArea.offsets[ii.x],lineArea.offsets[ii.y]);
+    int4 tOffsets = (offsets.xyxy - int4(0,0,4,4))*8 + int4(0,4,0,4);
+    bool4 validMasks = abs(tOffsets) < 32;
+    uint4 masks = sampledQuads.xyxy * validMasks;
+    uint4 quads = (tOffsets > 0 ? masks << tOffsets : masks >> -tOffsets);
 
-    [unroll]
-    for (int hi = 0; hi < 2; ++hi)
-    {
-        uint quad = gs_quadMask[masks[hi] + maskOffset];
-        int o = offsets[hi];
-        int downShift = max(0, -o);
-        quad >>= (downShift << 2);
-        int upShift = max(o << 2, 0);
-        uint halfV = 0xFFFFFFFF;
-        if (upShift < 32)
-        {
-            halfV = (1u << upShift) - 1u;
-            halfV |= ((quad >> 0 ) & 0xF) << (upShift + 0);
-            halfV |= ((quad >> 4 ) & 0xF) << (upShift + 4);
-            halfV |= ((quad >> 8 ) & 0xF) << (upShift + 8);
-            halfV |= ((quad >> 12) & 0xF) << (upShift + 12);
-        }
-        halfs[hi] = halfV;
-    }
-
-    //Producing the coverage mask with the following instruction set:
-    //c.x |= ((halfs[0] >> 0)  & 0xF) << 0;
-    //c.x |= ((halfs[0] >> 4)  & 0xF) << 8;
-    //c.x |= ((halfs[0] >> 8)  & 0xF) << 16;
-    //c.x |= ((halfs[0] >> 12) & 0xF) << 24;
-    //c.y |= ((halfs[0] >> 16) & 0xF) << 0;
-    //c.y |= ((halfs[0] >> 20) & 0xF) << 8;
-    //c.y |= ((halfs[0] >> 24) & 0xF) << 16;
-    //c.y |= ((halfs[0] >> 28) & 0xF) << 24;
-    uint2 c = 0;
-    for (uint r = 0; r < 4; ++r)
-    {
-        int a = r << 2;
-        int b = r << 3;
-        c.x |= (((halfs[0] >> (a +  0)) & 0xF) | (((halfs[1] >> (a +  0)) & 0xF) << 4)) << b;
-        c.y |= (((halfs[0] >> (a + 16)) & 0xF) | (((halfs[1] >> (a + 16)) & 0xF) << 4))<< b;
-    }
-    return c;
+    //fill with 1s 
+    quads |= (tOffsets >= 32 ? 0xFFFFFFFF.xxxx : (tOffsets < 0 ? 0.xxxx : ((1u << tOffsets) - 1u))) & uint2(0x0F0F0F0F, 0xF0F0F0F0).xyxy;
+    return uint2(quads.x|quads.y, quads.z|quads.w);
 }
 
 }
