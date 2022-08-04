@@ -57,6 +57,21 @@ uint flipQuadInX(uint mask)
     return flipNibble(mask, 0) | flipNibble(mask, 8) | flipNibble(mask, 16) | flipNibble(mask, 24);
 }
 
+uint transposeQuad(uint mask)
+{
+    uint result = 0;
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        for (int j = 0; j < 4; ++j)
+        {
+            if (mask & (1u << (i * 8 + j)))
+                result |= 1u << (j * 8 + i);
+        }
+    }
+    return result;
+}
+
 // Builds all the luts necessary for fast bit based coverage
 void init(uint groupThreadIndex)
 {
@@ -66,9 +81,12 @@ void init(uint groupThreadIndex)
 
     GroupMemoryBarrierWithGroupSync();
 
-    // Flip in X axis
+    // Flip in X axis, transpose
     if (groupThreadIndex < 16)
+    {
         gs_quadMask[groupThreadIndex + 16] = flipQuadInX(gs_quadMask[groupThreadIndex]);
+        gs_quadMask[groupThreadIndex + 32] = transposeQuad(gs_quadMask[groupThreadIndex]);
+    }
 }
 
 // Represents a 2D analytical line.
@@ -207,21 +225,31 @@ struct LineArea
 
 uint2 createCoverageMask(in LineArea lineArea)
 {
+    const uint leftSideMask = 0x0F0F0F0F;
+    const uint2 horizontalMask = uint2(leftSideMask, ~leftSideMask);
+
     //prepare samples
     int2 ii = lineArea.flipX ? int2(1,0) : int2(0,1);
     int2 flipOffset = lineArea.flipX ? int2(16,16) : int2(0,0);
-    uint2 sampledQuads = uint2(gs_quadMask[lineArea.masks[ii.x] + flipOffset.x], gs_quadMask[lineArea.masks[ii.y] + flipOffset.y]);
-
-    // generate quad masks
     int2 offsets = int2(lineArea.offsets[ii.x],lineArea.offsets[ii.y]);
-    int4 tOffsets = (offsets.xyxy - int4(0,0,4,4))*8 + int4(0,4,0,4);
-    bool4 validMasks = abs(tOffsets) < 32;
-    uint4 masks = sampledQuads.xyxy * validMasks;
-    uint4 quads = (tOffsets > 0 ? masks << tOffsets : masks >> -tOffsets);
 
-    //fill with 1s 
-    quads |= (tOffsets >= 32 ? 0xFFFFFFFF.xxxx : (tOffsets < 0 ? 0.xxxx : ((1u << tOffsets) - 1u))) & uint2(0x0F0F0F0F, 0xF0F0F0F0).xyxy;
-    return uint2(quads.x|quads.y, quads.z|quads.w);
+#if 1
+    // generate masks
+    uint2 quadSamples = uint2(gs_quadMask[lineArea.masks[ii.x] + flipOffset.x], gs_quadMask[lineArea.masks[ii.y] + flipOffset.y]);
+    uint2 sideMasks = uint2(~quadSamples.x, ~(quadSamples.y << 4)) & horizontalMask;
+    int4 tOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
+    uint4 halfMasks = (tOffsets > 0 ? sideMasks.xyxy << tOffsets : ~(~sideMasks.xyxy >> -tOffsets)) & horizontalMask.xyxy;
+    return uint2(halfMasks.x|halfMasks.y, halfMasks.z|halfMasks.w);
+#else
+    uint2 sampledQuads = uint2(gs_quadMask[lineArea.masks[0] + 32], gs_quadMask[lineArea.masks[1] + 32]);
+    int2 offsets = int2(lineArea.offsets[0],lineArea.offsets[1]);
+    int2 tOffsets = offsets;
+    bool2 validMasks = abs(tOffsets) < 8;
+    uint2 halfMasks = tOffsets.xy < 4.xx ? horizontalMask.xx : (~horizontalMask).xx;
+    uint2 masks = (sampledQuads * validMasks);
+    uint2 halfs = tOffsets > 0 ? masks << tOffsets : masks >> -tOffsets;
+    return halfs & halfMasks;
+#endif
 }
 
 }
