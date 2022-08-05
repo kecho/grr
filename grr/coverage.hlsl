@@ -114,15 +114,16 @@ struct Line
     // Builds a "Flipped" line.
     // A flipped line is defined as having a positive slope < 1.0 
     // The two output booleans specify the flip operators to recover the original line.
-    void buildFlipped(float2 v0, float2 v1, out bool outFlipX, out bool outFlipAxis, out bool outIsRightHand)
+    void buildFlipped(float2 v0, float2 v1, out bool outFlipX, out bool outFlipAxis, out bool outIsRightHand, out bool outValid)
     {
         //build line with flip bits for lookup compression
         //This line will have a slope between 0 and 0.5, and always positive.
         //We output the flips as bools
 
-        outIsRightHand = v0.y >= v1.y;
         float2 ll = v1 - v0;
         outFlipAxis = abs(ll.y) > abs(ll.x);
+        outFlipX = sign(ll.y) != sign(ll.x);
+        outIsRightHand = ll.x >= 0 ? v0.y >= v1.y : v0.y > v1.y;
         if (outFlipAxis)
         {
             ll.xy = ll.yx;
@@ -130,7 +131,6 @@ struct Line
             v1.xy = v1.yx;
         }
 
-        outFlipX = sign(ll.y) != sign(ll.x);
         a = ll.y/ll.x;
         if (outFlipX)
         {
@@ -139,6 +139,7 @@ struct Line
             a *= -1;
         }
         b = v1.y - a * v1.x;
+        outValid = any(v1 != v0);//ll.y != 0.0f;
     }
 
     // Evaluates f(x) = a * x + b for the line
@@ -168,6 +169,7 @@ struct LineArea
 {
     int offsets[2];
     uint masks[2];
+    bool isValid;
     bool flipX;
     bool flipAxis;
     bool isRightHand;
@@ -203,7 +205,7 @@ struct LineArea
         data.debugLine.build(v0, v1);
 
         Line l;
-        l.buildFlipped(v0, v1, data.flipX, data.flipAxis, data.isRightHand);
+        l.buildFlipped(v0, v1, data.flipX, data.flipAxis, data.isRightHand, data.isValid);
 
         // Xs values of 8 points
         const float4 xs0 = float4(0.5,1.5,2.5,3.5)/8.0;
@@ -261,11 +263,35 @@ uint2 createCoverageMask(in LineArea lineArea)
         result = uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
     }
 
-    //return (lineArea.flipX || lineArea.isRightHand) ? result : ~result;
     result = lineArea.flipX ? ~result : result;
     result = lineArea.isRightHand ? result : ~result;
+    result = lineArea.isValid ? result : 0;
     return result;
 
+}
+
+uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface)
+{
+    uint2 mask0 = coverage::createCoverageMask(coverage::LineArea::create(v0, v1));
+    uint2 mask1 = coverage::createCoverageMask(coverage::LineArea::create(v1, v2));
+    uint2 mask2 = coverage::createCoverageMask(coverage::LineArea::create(v2, v0));
+    uint2 frontMask = (mask0 & mask1 & mask2);
+    bool frontMaskValid = any(mask0 != 0) || any(mask1 != 0) || any(mask2 != 0);
+    return (showFrontFace * (mask0 & mask1 & mask2)) | ((frontMaskValid && showBackface) * (~mask0 & ~mask1 & ~mask2));
+}
+
+uint2 lineCoverageMask(float2 v0, float2 v1, float thickness, float caps)
+{
+    float2 lineVector = normalize(v1 - v0);
+    float2 D = cross(float3(lineVector, 0.0),float3(0,0,1)).xy * thickness;
+    v0 -= caps * lineVector;
+    v1 += caps * lineVector;
+    
+    uint2 mask0 = coverage::createCoverageMask(coverage::LineArea::create(v0 - D, v1 - D));
+    uint2 mask1 = coverage::createCoverageMask(coverage::LineArea::create(v1 + D, v0 + D));
+    uint2 mask2 = coverage::createCoverageMask(coverage::LineArea::create(v0 + D, v0 - D));
+    uint2 mask3 = coverage::createCoverageMask(coverage::LineArea::create(v1 - D, v1 + D));
+    return mask0 & mask1 & mask3 & mask2;
 }
 
 }

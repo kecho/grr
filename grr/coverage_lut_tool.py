@@ -16,6 +16,12 @@ class CoverageLUTTool:
         self.m_v1y = 0.9
         self.m_v2x = 0.9
         self.m_v2y = 0.2
+        self.m_v3x = 0.2
+        self.m_v3y = 0.5
+        self.m_v4x = 0.8 
+        self.m_v4y = 0.5
+        self.m_line_thickness = 0.18
+        self.m_line_cap = 0.0
         return
 
     @property
@@ -37,7 +43,10 @@ class CoverageLUTTool:
             constants = [
                 float(self.m_tex_width), float(self.m_tex_height), 1.0/float(self.m_tex_width), 1.0/float(self.m_tex_height),
                 float(self.m_v0x), float(self.m_v0y), float(self.m_v1x), float(self.m_v1y),
-                float(self.m_v2x), float(self.m_v2y), 0.0, 0.0],
+                float(self.m_v2x), float(self.m_v2y), float(self.m_v3x), float(self.m_v3y),
+                float(self.m_v4x), float(self.m_v4y), float(0.0), float(0.0),
+                float(self.m_line_thickness), float(self.m_line_cap), float(0.0), float(0.0)],
+            
             samplers = [debug_font.font_sampler],
             inputs = [debug_font.font_texture],
             outputs = self.m_texture,
@@ -52,12 +61,18 @@ class CoverageLUTTool:
 
     def build_ui(self, imgui : g.ImguiBuilder):
         self.m_active = imgui.begin("Coverage LUT Tool", self.m_active)
-        self.m_v0x = imgui.slider_float(label="v0x", v=self.m_v0x, v_min=0.0, v_max=1.0)
-        self.m_v0y = imgui.slider_float(label="v0y", v=self.m_v0y, v_min=0.0, v_max=1.0)
-        self.m_v1x = imgui.slider_float(label="v1x", v=self.m_v1x, v_min=0.0, v_max=1.0)
-        self.m_v1y = imgui.slider_float(label="v1y", v=self.m_v1y, v_min=0.0, v_max=1.0)
-        self.m_v2x = imgui.slider_float(label="v2x", v=self.m_v2x, v_min=0.0, v_max=1.0)
-        self.m_v2y = imgui.slider_float(label="v2y", v=self.m_v2y, v_min=0.0, v_max=1.0)
+        self.m_v0x = imgui.slider_float(label="tri_v0x", v=self.m_v0x, v_min=0.0, v_max=1.0)
+        self.m_v0y = imgui.slider_float(label="tri_v0y", v=self.m_v0y, v_min=0.0, v_max=1.0)
+        self.m_v1x = imgui.slider_float(label="tri_v1x", v=self.m_v1x, v_min=0.0, v_max=1.0)
+        self.m_v1y = imgui.slider_float(label="tri_v1y", v=self.m_v1y, v_min=0.0, v_max=1.0)
+        self.m_v2x = imgui.slider_float(label="tri_v2x", v=self.m_v2x, v_min=0.0, v_max=1.0)
+        self.m_v2y = imgui.slider_float(label="tri_v2y", v=self.m_v2y, v_min=0.0, v_max=1.0)
+        self.m_v3x = imgui.slider_float(label="line_v0x", v=self.m_v3x, v_min=0.0, v_max=1.0)
+        self.m_v3y = imgui.slider_float(label="line_v0y", v=self.m_v3y, v_min=0.0, v_max=1.0)
+        self.m_v4x = imgui.slider_float(label="line_v1x", v=self.m_v4x, v_min=0.0, v_max=1.0)
+        self.m_v4y = imgui.slider_float(label="line_v1y", v=self.m_v4y, v_min=0.0, v_max=1.0)
+        self.m_line_thickness = imgui.slider_float(label="line_thickness", v=self.m_line_thickness, v_min=0.0, v_max=1.0)
+        self.m_line_cap = imgui.slider_float(label="line_cap", v=self.m_line_cap, v_min=0.0, v_max=1.0)
 
         (cr_min_w, cr_min_h) = imgui.get_cursor_pos()
         (cr_max_w, cr_max_h) = imgui.get_window_content_region_max()

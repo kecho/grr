@@ -4,22 +4,28 @@
 cbuffer Constants : register(b0)
 {
     float4 g_size; //w,h,1/w,1/h
-    float4 g_packedTri0;
-    float4 g_packedTri1;
+    float4 g_packedV0;
+    float4 g_packedV1;
+    float4 g_packedV2;
+    float4 g_lineArgs;
 }
 
-struct InputTri
+struct InputVertices
 {
     float2 v0;
     float2 v1;
     float2 v2;
+    float2 v3;
+    float2 v4;
 
     void load()
     {
         float2 aspect = float2(g_size.x * g_size.w, 1.0);
-        v0 = g_packedTri0.xy * aspect;    
-        v1 = g_packedTri0.zw * aspect;    
-        v2 = g_packedTri1.xy * aspect;    
+        v0 = g_packedV0.xy * aspect;    
+        v1 = g_packedV0.zw * aspect;    
+        v2 = g_packedV1.xy * aspect;    
+        v3 = g_packedV1.zw * aspect;    
+        v4 = g_packedV2.xy * aspect;    
     }
 };
 
@@ -117,35 +123,38 @@ void csMain(
     float2 boardUv = screenUv - boardOffset;
     float3 color = float3(0,0,0);
 
-    InputTri tri;
-    tri.load();
-    color = drawLine(color, tri.v0, tri.v1, screenUv);
-    //color = drawLine(color, tri.v1, tri.v2, screenUv);
-    //color = drawLine(color, tri.v2, tri.v0, screenUv);
-    color = drawVertex(color, tri.v0, screenUv);
-    color = drawVertex(color, tri.v1, screenUv);
-    //color = drawVertex(color, tri.v2, screenUv);
+    InputVertices verts;
+    verts.load();
+    color = drawLine(color, verts.v0, verts.v1, screenUv);
+    color = drawLine(color, verts.v1, verts.v2, screenUv);
+    color = drawLine(color, verts.v2, verts.v0, screenUv);
+    color = drawVertex(color, verts.v0, screenUv);
+    color = drawVertex(color, verts.v1, screenUv);
+    color = drawVertex(color, verts.v2, screenUv);
+
+    color = drawLine(color, verts.v3, verts.v4, screenUv);
 
     //make all uv coordinates relative to board
-    tri.v0 -= boardOffset;
-    tri.v1 -= boardOffset;
-    tri.v2 -= boardOffset;
+    verts.v0 -= boardOffset;
+    verts.v1 -= boardOffset;
+    verts.v2 -= boardOffset;
+    verts.v3 -= boardOffset;
+    verts.v4 -= boardOffset;
 
+    uint2 triangleMask = 0;
+    uint2 lineMask = 0;
     if (all(boardUv >= 0.0) && all(boardUv <= 1.0))
     {
         uint2 mask = uint2(0, 1251512);
         float4 gridCol = drawGrid(boardUv);
         color = lerp(color, gridCol.rgb, saturate(gridCol.a));
-        
-        coverage::LineArea lineArea = coverage::LineArea::create(tri.v0, tri.v1);
-        {
-            for (uint i = 0; i < 8; ++i)
-                color = drawBaseMask(color, lineArea, i, boardUv);
-        }
-        color = drawCoverageMask(color, coverage::createCoverageMask(lineArea), boardUv);
-        color = drawVertex(color, lineArea.debugLine.pointAt(0.5/8.0), boardUv);
-        color = drawVertex(color, lineArea.debugLine.pointAt(7.5/8.0), boardUv);
+        triangleMask = coverage::triangleCoverageMask(verts.v0, verts.v1, verts.v2, true, true);
+
+        float lineThickness = g_lineArgs.x;
+        float lineCap = g_lineArgs.y;
+        lineMask = coverage::lineCoverageMask(verts.v3, verts.v4, lineThickness, lineCap);
     }
 
+    color = drawCoverageMask(color, triangleMask | lineMask, boardUv);
     g_output[pixelCoord] = float4(color, 1.0);
 }
