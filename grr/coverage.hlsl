@@ -6,8 +6,8 @@ namespace coverage
 {
 
 //lut for 4x4 quad mask. See buildQuadMask function
-// 2 states for horizontal flipping
-groupshared uint gs_quadMask[16 * 2]; 
+// 4 states for horizontal flipping and vertical flipping
+groupshared uint gs_quadMask[16 * 4]; 
 
 // buildQuadMask
 //Function that builds a 4x4 compact bit quad for line coverage.
@@ -86,6 +86,11 @@ void init(uint groupThreadIndex)
     {
         gs_quadMask[groupThreadIndex + 16] = flipQuadInX(gs_quadMask[groupThreadIndex]);
         gs_quadMask[groupThreadIndex + 32] = transposeQuad(gs_quadMask[groupThreadIndex]);
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (groupThreadIndex < 16)
+    {
+        gs_quadMask[groupThreadIndex + 48] = flipQuadInX(gs_quadMask[groupThreadIndex + 32]);
     }
 }
 
@@ -230,26 +235,29 @@ uint2 createCoverageMask(in LineArea lineArea)
 
     //prepare samples
     int2 ii = lineArea.flipX ? int2(1,0) : int2(0,1);
-    int2 flipOffset = lineArea.flipX ? int2(16,16) : int2(0,0);
+    int lutOperation = ((uint)lineArea.flipX << 4) | ((uint)lineArea.flipAxis << 5);
     int2 offsets = int2(lineArea.offsets[ii.x],lineArea.offsets[ii.y]);
+    uint2 halfSamples = uint2(gs_quadMask[lineArea.masks[ii.x] + lutOperation], gs_quadMask[lineArea.masks[ii.y] + lutOperation]);
 
-#if 1
     // generate masks
-    uint2 quadSamples = uint2(gs_quadMask[lineArea.masks[ii.x] + flipOffset.x], gs_quadMask[lineArea.masks[ii.y] + flipOffset.y]);
-    uint2 sideMasks = uint2(~quadSamples.x, ~(quadSamples.y << 4)) & horizontalMask;
-    int4 tOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
-    uint4 halfMasks = (tOffsets > 0 ? sideMasks.xyxy << tOffsets : ~(~sideMasks.xyxy >> -tOffsets)) & horizontalMask.xyxy;
-    return uint2(halfMasks.x|halfMasks.y, halfMasks.z|halfMasks.w);
-#else
-    uint2 sampledQuads = uint2(gs_quadMask[lineArea.masks[0] + 32], gs_quadMask[lineArea.masks[1] + 32]);
-    int2 offsets = int2(lineArea.offsets[0],lineArea.offsets[1]);
-    int2 tOffsets = offsets;
-    bool2 validMasks = abs(tOffsets) < 8;
-    uint2 halfMasks = tOffsets.xy < 4.xx ? horizontalMask.xx : (~horizontalMask).xx;
-    uint2 masks = (sampledQuads * validMasks);
-    uint2 halfs = tOffsets > 0 ? masks << tOffsets : masks >> -tOffsets;
-    return halfs & halfMasks;
-#endif
+    if (lineArea.flipAxis)
+    {
+        int2 tOffsets = clamp(offsets, -31, 31);
+        uint2 workMask = leftSideMask << clamp(offsets, 0, 4);
+        uint2 topDownMasks = (tOffsets > 0 ? halfSamples << tOffsets : halfSamples >> -tOffsets);
+        uint2 backBite = 0xFFFF & ((tOffsets > 0 ? (1u.xx << tOffsets) : (1u.xx  >> -tOffsets)) - 1u);
+        uint2 backMask = backBite | (backBite << 8) | (backBite << 16) | (backBite << 24);
+        return (topDownMasks & workMask) | backBite;
+        //return halfSamples << (tOffsets - 1);
+    }
+    else
+    {
+        uint2 sideMasks = uint2(~halfSamples.x, ~(halfSamples.y << 4)) & horizontalMask;
+        int4 tOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
+        uint4 halfMasks = (tOffsets > 0 ? sideMasks.xyxy << tOffsets : ~(~sideMasks.xyxy >> -tOffsets)) & horizontalMask.xyxy;
+        return uint2(halfMasks.x|halfMasks.y, halfMasks.z|halfMasks.w);
+    }
+
 }
 
 }
