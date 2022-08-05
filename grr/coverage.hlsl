@@ -57,11 +57,6 @@ uint flipQuadInX(uint mask)
     return flipNibble(mask, 0) | flipNibble(mask, 8) | flipNibble(mask, 16) | flipNibble(mask, 24);
 }
 
-//uint flipQuadInY(uint mask)
-//{
-//    
-//}
-
 uint transposeQuad(uint mask)
 {
     uint result = 0;
@@ -119,12 +114,13 @@ struct Line
     // Builds a "Flipped" line.
     // A flipped line is defined as having a positive slope < 1.0 
     // The two output booleans specify the flip operators to recover the original line.
-    void buildFlipped(float2 v0, float2 v1, out bool outFlipX, out bool outFlipAxis)
+    void buildFlipped(float2 v0, float2 v1, out bool outFlipX, out bool outFlipAxis, out bool outIsRightHand)
     {
         //build line with flip bits for lookup compression
         //This line will have a slope between 0 and 0.5, and always positive.
         //We output the flips as bools
 
+        outIsRightHand = v0.y >= v1.y;
         float2 ll = v1 - v0;
         outFlipAxis = abs(ll.y) > abs(ll.x);
         if (outFlipAxis)
@@ -142,7 +138,6 @@ struct Line
             v1.x = 1.0 - v1.x;
             a *= -1;
         }
-
         b = v1.y - a * v1.x;
     }
 
@@ -175,6 +170,7 @@ struct LineArea
     uint masks[2];
     bool flipX;
     bool flipAxis;
+    bool isRightHand;
     Line debugLine;
 
     // Recovers a single point in the boundary
@@ -207,7 +203,7 @@ struct LineArea
         data.debugLine.build(v0, v1);
 
         Line l;
-        l.buildFlipped(v0, v1, data.flipX, data.flipAxis);
+        l.buildFlipped(v0, v1, data.flipX, data.flipAxis, data.isRightHand);
 
         // Xs values of 8 points
         const float4 xs0 = float4(0.5,1.5,2.5,3.5)/8.0;
@@ -238,41 +234,37 @@ uint2 createCoverageMask(in LineArea lineArea)
     const uint leftSideMask = 0x0F0F0F0F;
     const uint2 horizontalMask = uint2(leftSideMask, ~leftSideMask);
 
-    //prepare samples
+    //prepare samples, flip samples if there is mirroring in x
     int2 ii = lineArea.flipX ? int2(1,0) : int2(0,1);
     int lutOperation = ((uint)lineArea.flipX << 4) | ((uint)lineArea.flipAxis << 5);
     int2 offsets = int2(lineArea.offsets[ii.x],lineArea.offsets[ii.y]);
     uint2 halfSamples = uint2(gs_quadMask[lineArea.masks[ii.x] + lutOperation], gs_quadMask[lineArea.masks[ii.y] + lutOperation]);
 
-    // generate masks
+    uint2 result = 0;
     if (lineArea.flipAxis)
     {
+        //Case were we have flipped axis / transpose. We generate top and bottom part
         int2 tOffsets = clamp(offsets, -31, 31);
         uint2 workMask = leftSideMask << clamp(offsets, 0, 4);
         uint2 topDownMasks = (tOffsets > 0 ? halfSamples << tOffsets : halfSamples >> -tOffsets);
-        uint2 backBite;
-        
-        if (lineArea.flipX)
-        {
-            uint2 backBiteOtherOffset = clamp(tOffsets + 4, -31, 31);
-            uint2 mirrorBackbite = 0xFF & ~((backBiteOtherOffset > 0 ? 1u << backBiteOtherOffset : 1u >> -backBiteOtherOffset) - 1u);
-            backBite = mirrorBackbite;
-        }
-        else
-        {
-            backBite = tOffsets <= 0 ? 0 : (0xFFFF & ((tOffsets > 0 ? (1u.xx << tOffsets) : (1u.xx  >> -tOffsets)) - 1u));
-        }
-
-        uint2 backMask = backBite | (backBite << 8) | (backBite << 16) | (backBite << 24);
-        return backMask | (topDownMasks & workMask);
+        int2 backMaskShift = lineArea.flipX ? clamp(tOffsets + 4, -31, 31) : tOffsets;
+        uint2 backMaskOp = ((backMaskShift > 0 ? 1u << backMaskShift : 1u >> -backMaskShift) - 1u);
+        uint2 backBite = backMaskShift <= 0 ? (lineArea.flipX ? ~0x0 : 0x0) : (lineArea.flipX ? (0xFF & ~backMaskOp) : (0xFFFF & backMaskOp));
+        result = backBite | (backBite << 8) | (backBite << 16) | (backBite << 24) | (topDownMasks & workMask);
     }
     else
     {
-        uint2 sideMasks = uint2(~halfSamples.x, ~(halfSamples.y << 4)) & horizontalMask;
+        //Case were the masks are positioned horizontally. We generate 4 quads
+        uint2 sideMasks = uint2(halfSamples.x, (halfSamples.y << 4));
         int4 tOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
-        uint4 halfMasks = (tOffsets > 0 ? sideMasks.xyxy << tOffsets : ~(~sideMasks.xyxy >> -tOffsets)) & horizontalMask.xyxy;
-        return uint2(halfMasks.x|halfMasks.y, halfMasks.z|halfMasks.w);
+        uint4 halfMasks = (tOffsets > 0 ? (~sideMasks.xyxy & horizontalMask.xyxy) << tOffsets : ~(sideMasks.xyxy >> -tOffsets)) & horizontalMask.xyxy;
+        result = uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
     }
+
+    //return (lineArea.flipX || lineArea.isRightHand) ? result : ~result;
+    result = lineArea.flipX ? ~result : result;
+    result = lineArea.isRightHand ? result : ~result;
+    return result;
 
 }
 
