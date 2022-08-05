@@ -248,7 +248,9 @@ uint2 createCoverageMask(in LineArea lineArea)
         //Case were we have flipped axis / transpose. We generate top and bottom part
         int2 tOffsets = clamp(offsets, -31, 31);
         uint2 workMask = leftSideMask << clamp(offsets, 0, 4);
-        uint2 topDownMasks = (tOffsets > 0 ? halfSamples << tOffsets : halfSamples >> -tOffsets);
+        uint2 topDownMasks = (tOffsets > 0 ?
+            ((halfSamples << min(4,tOffsets)) & leftSideMask) | ((halfSamples << min(8,tOffsets)) & ~leftSideMask)
+          : (((halfSamples << 4) >> min(4,-tOffsets) & ~leftSideMask) >> 4));
         int2 backMaskShift = lineArea.flipX ? clamp(tOffsets + 4, -31, 31) : tOffsets;
         uint2 backMaskOp = ((backMaskShift > 0 ? 1u << backMaskShift : 1u >> -backMaskShift) - 1u);
         uint2 backBite = backMaskShift <= 0 ? (lineArea.flipX ? ~0x0 : 0x0) : (lineArea.flipX ? (0xFF & ~backMaskOp) : (0xFFFF & backMaskOp));

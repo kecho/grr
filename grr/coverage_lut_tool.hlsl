@@ -1,6 +1,12 @@
 #include "debug_font.hlsl"
 #include "coverage.hlsl"
 
+// Flags must match coverage_lut_tool.py
+#define SHOW_TRIANGLE (1 << 0)
+#define SHOW_TRIANGLE_BACKFACE (1 << 1)
+#define SHOW_TRIANGLE_FRONTFACE (1 << 2)
+#define SHOW_LINE (1 << 3)
+
 cbuffer Constants : register(b0)
 {
     float4 g_size; //w,h,1/w,1/h
@@ -8,6 +14,7 @@ cbuffer Constants : register(b0)
     float4 g_packedV1;
     float4 g_packedV2;
     float4 g_lineArgs;
+    uint4 g_miscArgs;
 }
 
 struct InputVertices
@@ -123,16 +130,29 @@ void csMain(
     float2 boardUv = screenUv - boardOffset;
     float3 color = float3(0,0,0);
 
+    uint drawFlags = g_miscArgs.x;
+
+    bool showTriangle = drawFlags & SHOW_TRIANGLE;
+    bool showLine = drawFlags & SHOW_LINE;
+
     InputVertices verts;
     verts.load();
-    color = drawLine(color, verts.v0, verts.v1, screenUv);
-    color = drawLine(color, verts.v1, verts.v2, screenUv);
-    color = drawLine(color, verts.v2, verts.v0, screenUv);
-    color = drawVertex(color, verts.v0, screenUv);
-    color = drawVertex(color, verts.v1, screenUv);
-    color = drawVertex(color, verts.v2, screenUv);
+    if (showTriangle)
+    {
+        color = drawLine(color, verts.v0, verts.v1, screenUv);
+        color = drawLine(color, verts.v1, verts.v2, screenUv);
+        color = drawLine(color, verts.v2, verts.v0, screenUv);
+        color = drawVertex(color, verts.v0, screenUv);
+        color = drawVertex(color, verts.v1, screenUv);
+        color = drawVertex(color, verts.v2, screenUv);
+    }
 
-    color = drawLine(color, verts.v3, verts.v4, screenUv);
+    if (showLine)
+    {
+        color = drawLine(color, verts.v3, verts.v4, screenUv);
+        color = drawVertex(color, verts.v3, screenUv);
+        color = drawVertex(color, verts.v4, screenUv);
+    }
 
     //make all uv coordinates relative to board
     verts.v0 -= boardOffset;
@@ -148,11 +168,14 @@ void csMain(
         uint2 mask = uint2(0, 1251512);
         float4 gridCol = drawGrid(boardUv);
         color = lerp(color, gridCol.rgb, saturate(gridCol.a));
-        triangleMask = coverage::triangleCoverageMask(verts.v0, verts.v1, verts.v2, true, true);
+
+        bool showFrontFace = (drawFlags & SHOW_TRIANGLE_FRONTFACE) != 0;
+        bool showBackFace = (drawFlags & SHOW_TRIANGLE_BACKFACE) != 0;
+        triangleMask = showTriangle ? coverage::triangleCoverageMask(verts.v0, verts.v1, verts.v2, showFrontFace, showBackFace) : 0;
 
         float lineThickness = g_lineArgs.x;
         float lineCap = g_lineArgs.y;
-        lineMask = coverage::lineCoverageMask(verts.v3, verts.v4, lineThickness, lineCap);
+        lineMask = showLine ? coverage::lineCoverageMask(verts.v3, verts.v4, lineThickness, lineCap) : 0;
     }
 
     color = drawCoverageMask(color, triangleMask | lineMask, boardUv);

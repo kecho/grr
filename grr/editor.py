@@ -327,6 +327,8 @@ class Editor:
             if (imgui.collapsing_header("Debug", g.ImGuiTreeNodeFlags.DefaultOpen)):
                 self.m_selected_viewport.debug_coarse_tiles = imgui.checkbox(label = "Show coarse tiles", v = self.m_selected_viewport.debug_coarse_tiles)
                 self.m_selected_viewport.debug_fine_tiles = imgui.checkbox(label = "Show fine tiles", v = self.m_selected_viewport.debug_fine_tiles)
+        if self.m_coverage_lut_tool.active:
+            self.m_coverage_lut_tool.build_ui_properties(imgui)
 
         imgui.end()
 
