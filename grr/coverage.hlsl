@@ -108,9 +108,11 @@ uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, 
 
 
 /*
-Call this function to get a 64 bit coverage mask for a triangle.
-v0, v1, v2 - the triangle coordinates in right hand ruling order
-return - the coverage mask for this triangle
+Call this function to get a 64 bit coverage mask for a line.
+v0, v1 - the line coordinates.
+thickness - thickness of line in normalized space. 1.0 means the entire 8 pixels in a tile
+caps - extra pixels in the caps of the line in normalized space. 1.0 means 8 pixels in a tile
+return - the coverage mask of this line
 */
 uint2 lineCoverageMask(float2 v0, float2 v1, float thickness, float caps);
 
