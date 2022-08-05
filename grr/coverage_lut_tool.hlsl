@@ -119,7 +119,7 @@ void csMain(
     uint2 dispatchThreadID : SV_DispatchThreadID,
     uint groupThreadIndex : SV_GroupIndex)
 {
-    coverage::init(groupThreadIndex);
+    coverage::genLUT(groupThreadIndex);
 
     GroupMemoryBarrierWithGroupSync();
 

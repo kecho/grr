@@ -1,3 +1,27 @@
+/*
+MIT License
+
+Copyright (c) 2022 Kleber Garcia
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 #ifndef __COVERAGE__
 #define __COVERAGE__
 
@@ -5,23 +29,110 @@
 namespace coverage
 {
 
-//lut for 4x4 quad mask. See buildQuadMask function
-// 4 states for horizontal flipping and vertical flipping
+//**************************************************************************************************************/
+//                                           How to use
+//**************************************************************************************************************/
+/*
+To utilize this library, first call the genLUT function at the beginning of your compute shader.
+This function must be followed by a group sync. Example follows:
+
+...
+coverage::genLUT(groupThreadIndex);
+GroupMemoryBarrierWithGroupSync();
+...
+
+Alternatively, you can dump the contents into buffer. The contents of the LUT are inside gs_quadMask, which is 64 entries.
+
+After this use the coverage functions
+
+*/
+
+//**************************************************************************************************************/
+//                                        Coordinate System 
+//**************************************************************************************************************/
+/*
+The functions in this library follow the same convension, input is a shape described by certain vertices,
+output is a 64 bit mask with such shape's coverage.
+
+The coordinate system is (0,0) for the top left of an 8x8 grid, and (1,1) for the bottom right.
+The LSB represents coordinate (0,0), and sample points are centered on the pixel.
+
+(0.0,0.0)                           (1.0,0.0)
+    |                                   |
+    |___________________________________|
+    |   |   |   |   |   |   |   |   |   |
+    | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+    |___|___|___|___|___|___|___|___|___|
+    |   |   |   |   |   |   |   |   |   |
+    | 9 | 10| 11| 12| 13| 14| 15| 16| 17|
+    |___|___|___|___|___|___|___|___|___|___(1.0, 2.0/8.0)
+
+ the center of bit 0 would be 0.5,0.5 and so on
+
+any points outside of the range (0,1) means they are outside the grid.
+*/
+
+//**************************************************************************************************************/
+//                                           Masks 
+//**************************************************************************************************************/
+/*
+Masks are stored in a packed 64 bit represented by uint2.
+x component represents the first 32 bits, y component the next 32 bits.
+*/
+
+//**************************************************************************************************************/
+//                                           coverage API
+//**************************************************************************************************************/
+
+/*
+lut for 4x4 quad mask. See buildQuadMask function
+4 states for horizontal flipping and vertical flipping
+You can dump this lut to a buffer, and preload it manually,
+or just regenerated in your thread group
+*/
 groupshared uint gs_quadMask[16 * 4]; 
 
-// buildQuadMask
-//Function that builds a 4x4 compact bit quad for line coverage.
-// the line is assumed to have a positive slope < 1.0. That means it can only be raised 1 step at most.
-// "incrementMask" is a bit mask specifying how much the y component of a line increments.
-// "incrementMask" only describes 4 bits, the rest of the bits are ignored.
-// For example, given this bit mask:
-// 1 0 1 0
-// would generate this 4x4 coverage mask:
-//
-// 0 0 0 0 
-// 0 0 0 1 <- 3rd bit tells the line to raise here
-// 0 1 1 1 <- first bit raises the line
-// 1 1 1 1 <- low axis is always covered
+/*
+Call this function to generate the coverage 4x4 luts
+groupThreadIndex - the thread index.
+NOTE: must sync group threads after calling this. 
+*/
+void genLUT(uint groupThreadIndex);
+
+/*
+Call this function to get a 64 bit coverage mask for a triangle.
+v0, v1, v2 - the triangle coordinates in right hand ruling order
+return - the coverage mask for this triangle
+*/
+uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface);
+
+
+/*
+Call this function to get a 64 bit coverage mask for a triangle.
+v0, v1, v2 - the triangle coordinates in right hand ruling order
+return - the coverage mask for this triangle
+*/
+uint2 lineCoverageMask(float2 v0, float2 v1, float thickness, float caps);
+
+
+//**************************************************************************************************************/
+//                                       coverage implementation 
+//**************************************************************************************************************/
+
+/*
+function that builds a 4x4 compact bit quad for line coverage.
+the line is assumed to have a positive slope < 1.0. That means it can only be raised 1 step at most.
+"incrementMask" is a bit mask specifying how much the y component of a line increments.
+"incrementMask" only describes 4 bits, the rest of the bits are ignored.
+For example, given this bit mask:
+1 0 1 0
+would generate this 4x4 coverage mask:
+
+0 0 0 0 
+0 0 0 1 <- 3rd bit tells the line to raise here
+0 1 1 1 <- first bit raises the line
+1 1 1 1 <- low axis is always covered
+*/
 uint buildQuadMask(uint incrementMask)
 {
     uint c = 0;
@@ -73,7 +184,7 @@ uint transposeQuad(uint mask)
 }
 
 // Builds all the luts necessary for fast bit based coverage
-void init(uint groupThreadIndex)
+void genLUT(uint groupThreadIndex)
 {
     // Neutral
     if (groupThreadIndex < 16)
@@ -161,10 +272,12 @@ struct Line
     }
 };
 
-// Represents a set of bits in an 8x8 grid divided by a line.
-// The representation is given by 2 splits of the 8x8 grid.
-// offsets represents how much we offset the quadCoverage on either x or y (flipped dependant axis)
-// the mask represents the increment mask used to look up the quadCoverage
+/*
+Represents a set of bits in an 8x8 grid divided by a line.
+The representation is given by 2 splits of the 8x8 grid.
+offsets represents how much we offset the quadCoverage on either x or y (flipped dependant axis)
+the mask represents the increment mask used to look up the quadCoverage
+*/
 struct LineArea
 {
     int offsets[2];
