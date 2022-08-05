@@ -57,6 +57,11 @@ uint flipQuadInX(uint mask)
     return flipNibble(mask, 0) | flipNibble(mask, 8) | flipNibble(mask, 16) | flipNibble(mask, 24);
 }
 
+//uint flipQuadInY(uint mask)
+//{
+//    
+//}
+
 uint transposeQuad(uint mask)
 {
     uint result = 0;
@@ -90,7 +95,7 @@ void init(uint groupThreadIndex)
     GroupMemoryBarrierWithGroupSync();
     if (groupThreadIndex < 16)
     {
-        gs_quadMask[groupThreadIndex + 48] = flipQuadInX(gs_quadMask[groupThreadIndex + 32]);
+        gs_quadMask[groupThreadIndex + 48] = (~transposeQuad(flipQuadInX(gs_quadMask[groupThreadIndex]))) & 0x0F0F0F0F;
     }
 }
 
@@ -245,10 +250,21 @@ uint2 createCoverageMask(in LineArea lineArea)
         int2 tOffsets = clamp(offsets, -31, 31);
         uint2 workMask = leftSideMask << clamp(offsets, 0, 4);
         uint2 topDownMasks = (tOffsets > 0 ? halfSamples << tOffsets : halfSamples >> -tOffsets);
-        uint2 backBite = 0xFFFF & ((tOffsets > 0 ? (1u.xx << tOffsets) : (1u.xx  >> -tOffsets)) - 1u);
+        uint2 backBite;
+        
+        if (lineArea.flipX)
+        {
+            uint2 backBiteOtherOffset = clamp(tOffsets + 4, -31, 31);
+            uint2 mirrorBackbite = 0xFF & ~((backBiteOtherOffset > 0 ? 1u << backBiteOtherOffset : 1u >> -backBiteOtherOffset) - 1u);
+            backBite = mirrorBackbite;
+        }
+        else
+        {
+            backBite = tOffsets <= 0 ? 0 : (0xFFFF & ((tOffsets > 0 ? (1u.xx << tOffsets) : (1u.xx  >> -tOffsets)) - 1u));
+        }
+
         uint2 backMask = backBite | (backBite << 8) | (backBite << 16) | (backBite << 24);
-        return (topDownMasks & workMask) | backBite;
-        //return halfSamples << (tOffsets - 1);
+        return backMask | (topDownMasks & workMask);
     }
     else
     {
