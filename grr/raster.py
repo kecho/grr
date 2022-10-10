@@ -9,7 +9,7 @@ from . import prefix_sum
 class RasterizerFlags:
     RASTERIZER_FLAGS_OUTPUT_FINE_RASTER_COUNT = 1 << 0
 
-g_raster_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_fine_tile", main_function = "csMainRaster", defines = ["FINE_RASTER_ENABLED"])
+g_fine_raster_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_fine_tile", main_function = "csMainFineRaster", defines = ["FINE_RASTER"])
 g_bin_triangle_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_bining", main_function = "csMainBinTriangles" )
 g_bin_elements_args_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_elements_args", main_function = "csWriteBinElementArgsBuffer");
 g_bin_elements_shader = g.Shader(file = "raster_cs.hlsl", name = "raster_elements", main_function = "csMainWriteBinElements");
@@ -230,7 +230,7 @@ class Rasterizer:
         (fine_tiles_x, fine_tiles_y) = self.get_fine_tile_size(w, h)
         cmd_list.begin_marker("fine_raster")
         cmd_list.dispatch(
-            shader = g_raster_shader,
+            shader = g_fine_raster_shader,
             constants = self.m_constant_buffer,#const,
             inputs = [
                 gpugeo.m_vertex_buffer, 

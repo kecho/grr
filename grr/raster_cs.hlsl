@@ -1,12 +1,13 @@
 #include "geometry.hlsl"
 #include "raster_util.hlsl"
+#include "coverage.hlsl"
 
 #define FINE_TILE_THREAD_COUNT (FINE_TILE_SIZE * FINE_TILE_SIZE)
 #define COARSE_TILE_THREAD_COUNT (COARSE_TILE_SIZE * COARSE_TILE_SIZE)
 
 #define RASTERIZER_FLAGS_OUTPUT_FINE_RASTER_COUNT 1 << 0
 
-#ifdef FINE_RASTER_ENABLED
+#ifdef FINE_RASTER
 #define GroupSize FINE_TILE_THREAD_COUNT
 #else
 #define GroupSize COARSE_TILE_THREAD_COUNT
@@ -15,6 +16,7 @@
 #include "threading.hlsl"
 
 #define ENABLE_Z 1
+#define ENABLE_FINE_COVERAGE_LUT 0
 
 //Shared inputs
 ByteAddressBuffer g_verts : register(t0);
@@ -46,13 +48,19 @@ groupshared int gs_tileOffset;
 #define TRIANGLE_CACHE_COUNT FINE_TILE_THREAD_COUNT
 groupshared uint gs_furthestZ;
 groupshared geometry::TriangleH gs_th[TRIANGLE_CACHE_COUNT];
+groupshared uint2 gs_coverage[TRIANGLE_CACHE_COUNT];
 groupshared geometry::AABB gs_tileBounds;
 groupshared uint gs_triangleBatchCount;
 groupshared uint gs_writtenFineTileCount;
 
-void fineTileCullTriangleBatch(int groupThreadIndex)
+void fineTileCullTriangleBatch(int groupThreadIndex, int3 groupID, int2 pixelCoverageCoordinate)
 {
+    float2 pixelCoverageUV = (pixelCoverageCoordinate + 0.5) / (float)FINE_TILE_SIZE;
+
+    float2 tileOffset = (groupID.xy * (float)FINE_TILE_SIZE);
+
     geometry::TriangleH th = (geometry::TriangleH)0;
+    uint2 coverageMask = 0;
     uint triValid = 0;
     if (groupThreadIndex < gs_tileCount) 
     {
@@ -64,14 +72,29 @@ void fineTileCullTriangleBatch(int groupThreadIndex)
         tv.load(g_verts, ti);
         th.init(tv, g_view, g_proj);
         triValid = asuint(th.aabb().end.z) >= gs_furthestZ && th.aabb().intersects(gs_tileBounds) ? 1 : 0;
-    }
+
+    #if ENABLE_FINE_COVERAGE_LUT 
+        float2 v0 = ((((th.p0.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
+        float2 v1 = ((((th.p1.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
+        float2 v2 = ((((th.p2.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
+        v0.y = 1.0 - v0.y;
+        v1.y = 1.0 - v1.y;
+        v2.y = 1.0 - v2.y;
+        coverageMask = coverage::triangleCoverageMask(v0, v1, v2, true, true);
+        triValid = all(coverageMask == 0) ? 0 : 1;
+    #endif
+    } 
 
     Threading::Group group;
     group.init((uint)groupThreadIndex);
     uint offset, count;
     group.prefixExclusive(triValid, offset, count);
     if (triValid)
+    {
+        gs_coverage[offset] = coverageMask;
         gs_th[offset] = th;
+    }
+
     if (groupThreadIndex == 0)
     {
         gs_triangleBatchCount = count;
@@ -90,10 +113,18 @@ void nextTriangleBatch(int groupThreadIndex)
 }
 
 [numthreads(FINE_TILE_SIZE, FINE_TILE_SIZE, 1)]
-void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV_GroupID, int groupThreadIndex : SV_GroupIndex)
+void csMainFineRaster(
+    int3 dispatchThreadId : SV_DispatchThreadID,
+    int3 groupID : SV_GroupID,
+    int2 groupThreadID : SV_GroupThreadID,
+    int groupThreadIndex : SV_GroupIndex)
 {
+    coverage::genLUT(groupThreadIndex);
+    GroupMemoryBarrierWithGroupSync();
+
     float2 uv = geometry::pixelToUV(dispatchThreadId.xy, g_outputSizeInts);
     float2 hCoords = uv * float2(2.0,2.0) - float2(1.0, 1.0);
+    int2 pixelCoverageCoordinate = int2(groupThreadID.x, FINE_TILE_SIZE - groupThreadID.y - 1); 
 
     //hack, clear target
     float4 color = float4(0,0,0,0);
@@ -121,15 +152,25 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
         InterlockedMin(gs_furthestZ, asuint(zBuffer), unusedVal);
         GroupMemoryBarrierWithGroupSync();
 
-        fineTileCullTriangleBatch(groupThreadIndex);
+        fineTileCullTriangleBatch(groupThreadIndex, groupID, pixelCoverageCoordinate);
         GroupMemoryBarrierWithGroupSync();
 
         for (uint triIndex = 0; triIndex < gs_triangleBatchCount; ++triIndex)
         {
+            #if ENABLE_FINE_COVERAGE_LUT
+            uint2 coverageMask = gs_coverage[triIndex];
+            int coverageBit = (pixelCoverageCoordinate.x + pixelCoverageCoordinate.y * 8);
+            uint coverageHalf = coverageBit >= 32 ? (coverageMask.y & (1u << (coverageBit - 32))) : (coverageMask.x & (1u << coverageBit));
+            if (coverageHalf == 0)
+                continue;
+            #endif
+
             geometry::TriangleH th = gs_th[triIndex];
             geometry::TriInterpResult interpResult = th.interp(hCoords);
             float3 finalCol = interpResult.eval(float3(1,0,0), float3(0,1,0), float3(0,0,1));
+            #if !ENABLE_FINE_COVERAGE_LUT
             if (interpResult.visible)
+            #endif
             {
                 float pZ = interpResult.eval(th.h0.z, th.h1.z, th.h2.z);
                 float pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
@@ -138,6 +179,8 @@ void csMainRaster(int3 dispatchThreadId : SV_DispatchThreadID, int3 groupID : SV
                 {
                     writeColor = true;
                     color.xyz = finalCol;
+                    //color.xyz = ((dispatchThreadId.y % FINE_TILE_SIZE) + 0.5)/(float)FINE_TILE_SIZE;//finalCol;
+                    //color.xyz = groupThreadIndex / (float)64.0;
                     zBuffer = pZ; 
                 }
             }
