@@ -16,7 +16,7 @@
 #include "threading.hlsl"
 
 #define ENABLE_Z 1
-#define ENABLE_FINE_COVERAGE_LUT 0
+#define ENABLE_FINE_COVERAGE_LUT 1
 
 //Shared inputs
 ByteAddressBuffer g_verts : register(t0);
@@ -71,17 +71,23 @@ void fineTileCullTriangleBatch(int groupThreadIndex, int3 groupID, int2 pixelCov
         geometry::TriangleV tv;
         tv.load(g_verts, ti);
         th.init(tv, g_view, g_proj);
-        triValid = asuint(th.aabb().end.z) >= gs_furthestZ && th.aabb().intersects(gs_tileBounds) ? 1 : 0;
 
     #if ENABLE_FINE_COVERAGE_LUT 
-        float2 v0 = ((((th.p0.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
-        float2 v1 = ((((th.p1.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
-        float2 v2 = ((((th.p2.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
-        v0.y = 1.0 - v0.y;
-        v1.y = 1.0 - v1.y;
-        v2.y = 1.0 - v2.y;
-        coverageMask = coverage::triangleCoverageMask(v0, v1, v2, true, true);
-        triValid = all(coverageMask == 0) ? 0 : 1;
+        if (asuint(th.aabb().end.z) < gs_furthestZ)
+            triValid = 0;
+        else
+        {
+            float2 v0 = ((((th.p0.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
+            float2 v1 = ((((th.p1.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
+            float2 v2 = ((((th.p2.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
+            v0.y = 1.0 - v0.y;
+            v1.y = 1.0 - v1.y;
+            v2.y = 1.0 - v2.y;
+            coverageMask = coverage::triangleCoverageMask(v0, v1, v2, true, true);
+            triValid = all(coverageMask == 0) ? 0 : 1;
+        }
+    #else
+        triValid = asuint(th.aabb().end.z) >= gs_furthestZ && th.aabb().intersects(gs_tileBounds) ? 1 : 0;
     #endif
     } 
 
@@ -179,8 +185,6 @@ void csMainFineRaster(
                 {
                     writeColor = true;
                     color.xyz = finalCol;
-                    //color.xyz = ((dispatchThreadId.y % FINE_TILE_SIZE) + 0.5)/(float)FINE_TILE_SIZE;//finalCol;
-                    //color.xyz = groupThreadIndex / (float)64.0;
                     zBuffer = pZ; 
                 }
             }
