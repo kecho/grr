@@ -83,7 +83,7 @@ void fineTileCullTriangleBatch(int groupThreadIndex, int3 groupID, int2 pixelCov
             v0.y = 1.0 - v0.y;
             v1.y = 1.0 - v1.y;
             v2.y = 1.0 - v2.y;
-            coverageMask = coverage::triangleCoverageMask(v0, v1, v2, true, true);
+            coverageMask = coverage::triangleCoverageMask(v0, v1, v2, true, false);
             triValid = all(coverageMask == 0) ? 0 : 1;
         }
     #else
@@ -223,22 +223,22 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     geometry::TriangleH th;
     th.init(tv, g_view, g_proj);
 
-    float wEpsilon = 0.000001;
-    if (th.h0.w < 0.0)
-    {
-        th.h0 = float4(0.0,0.0,0.0,0.0);
-        th.p0 = float3(0.0,0.0,0.0);
-    }
-    if (th.h1.w < 0.0)
-    {
-        th.h1 = float4(0.0,0.0,0.0,0.0);
-        th.p1 = float3(0.0,0.0,0.0);
-    }
-    if (th.h2.w < 0.0)
-    {
-        th.h2 = float4(0.0,0.0,0.0,0.0);
-        th.p2 = float3(0.0,0.0,0.0);
-    }
+    //float wEpsilon = 0.000001;
+    //if (th.h0.w < 0.0)
+    //{
+    //    th.h0 = float4(0.0,0.0,0.0,0.0);
+    //    th.p0 = float3(0.0,0.0,0.0);
+    //}
+    //if (th.h1.w < 0.0)
+    //{
+    //    th.h1 = float4(0.0,0.0,0.0,0.0);
+    //    th.p1 = float3(0.0,0.0,0.0);
+    //}
+    //if (th.h2.w < 0.0)
+    //{
+    //    th.h2 = float4(0.0,0.0,0.0,0.0);
+    //    th.p2 = float3(0.0,0.0,0.0);
+    //}
 
     //float wEpsilon = 0.001;
     //if (th.h0.w < wEpsilon || th.h1.w < wEpsilon || th.h2.w < wEpsilon)

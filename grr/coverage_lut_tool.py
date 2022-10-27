@@ -13,7 +13,7 @@ g_coverage_lut_tool_shader = g.Shader(file="coverage_lut_tool.hlsl", name="cover
 
 class CoverageLUTTool:
     def __init__(self):
-        self.m_active = True
+        self.m_active = False
         self.m_texture = None
         self.m_tex_width = 0
         self.m_tex_height = 0
