@@ -46,7 +46,7 @@ class EditorViewport:
         self.m_last_mouse = (0.0, 0.0)
 
         #camera settings
-        self.m_cam_move_speed = 0.1
+        self.m_cam_move_speed = 4.0
         self.m_cam_rotation_speed = 0.1
         self.m_last_mouse = (0, 0)
         self.m_curr_mouse = (0, 0)

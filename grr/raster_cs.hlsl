@@ -228,7 +228,10 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     geometry::TriangleH th;
     th.init(tv, g_view, g_proj);
 
-    if ((th.clipZMask & ((1 << 3) - 1)) != 0)
+    //if ((th.clipZMask & ((1 << 3) - 1)) != 0)
+    //    return;
+
+    if (all(abs(th.og0.xyz) > th.og0.w) && all(abs(th.og0.xyz) > th.og0.w) && all(abs(th.og0.xyz) > th.og0.w))
         return;
 
     geometry::AABB aabb = th.aabb();
