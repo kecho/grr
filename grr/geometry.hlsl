@@ -122,10 +122,16 @@ namespace geometry
         float4 h1;
         float4 h2;
 
+        float4 og0;
+        float4 og1;
+        float4 og2;
+
         // Homogeneous screen coordinates after division by W
         float3 p0;
         float3 p1;
         float3 p2;
+
+        uint clipZMask;
 
         void init(TriangleV tri, float4x4 view, float4x4 proj)
         {
@@ -133,6 +139,31 @@ namespace geometry
             h1 = mul(mul(float4(tri.b.p.xyz, 1.0), view), proj);
             h2 = mul(mul(float4(tri.c.p.xyz, 1.0), view), proj);
 
+            og0 = h0;
+            og1 = h1;
+            og2 = h2;
+            clipZMask = 0;
+            clipZMask |= clipVert(h2, h0) << 0; 
+            clipZMask |= clipVert(h2, h1) << 1; 
+            clipZMask |= clipVert(h1, h2) << 2; 
+            calculatePoints();
+        }
+
+        uint clipVert(in float4 dominantVert, inout float4 h)
+        {
+            if (h.z < h.w)
+                return h.w < MIN_DEPTH;
+            
+            float dw = MIN_DEPTH - h.w;
+            float2 a = (h.xy - dominantVert.xy)/(h.w - dominantVert.w);
+            float ogDepth = h.w;
+            h.w = MIN_DEPTH;
+            h.xy += a * dw;
+            return 1;
+        }
+
+        void calculatePoints()
+        {
             p0 = h0.xyz / h0.w;
             p1 = h1.xyz / h1.w;
             p2 = h2.xyz / h2.w;
@@ -156,7 +187,7 @@ namespace geometry
             float frontFace = min(wa, min(wb, wc));
 
             TriInterpResult result;
-            result.bari = computeBaryCoordPerspective(float3(p0.xy,h0.w), float3(p1.xy,h1.w), float3(p2.xy,h2.w), hCoords);
+            result.bari = computeBaryCoordPerspective(float3(og0.xy/og0.w,og0.w), float3(og1.xy/og1.w,og1.w), float3(og2.xy/og2.w,og2.w), hCoords);
             result.isBackface = backFace > 0.0;
             result.isFrontface = frontFace > 0.0;
             result.visible = result.isBackface || result.isFrontface;

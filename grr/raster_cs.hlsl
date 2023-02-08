@@ -211,7 +211,6 @@ RWBuffer<uint> g_outTotalRecords : register(u0);
 RWBuffer<uint> g_binCounters : register(u1);
 RWStructuredBuffer<raster::BinIntersectionRecord> g_binOutputRecords : register(u2);
 
-
 [numthreads(64, 1, 1)]
 void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
 {
@@ -229,11 +228,7 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     geometry::TriangleH th;
     th.init(tv, g_view, g_proj);
 
-    //float wEpsilon = 0.001;
-    //if (th.h0.w < wEpsilon || th.h1.w < wEpsilon || th.h2.w < wEpsilon)
-    //    return;
-    
-    if (th.h0.z >= th.h0.w || th.h2.z >= th.h2.w || th.h1.z >= th.h1.w )
+    if ((th.clipZMask & ((1 << 3) - 1)) != 0)
         return;
 
     geometry::AABB aabb = th.aabb();
@@ -258,10 +253,10 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             int2 tileE = tileB + 1;
             geometry::AABB tile;
 
-            tile.begin = float3(geometry::uvToH(geometry::pixelToUV(tileB * COARSE_TILE_SIZE, g_outputSize.xy)), 0);
-            tile.end = float3(geometry::uvToH(geometry::pixelToUV(tileE * COARSE_TILE_SIZE, g_outputSize.xy)), 1);
+            tile.begin = float3(geometry::uvToH(geometry::pixelToUV(tileB * COARSE_TILE_SIZE, g_outputSize.xy)), MAX_DEPTH);
+            tile.end = float3(geometry::uvToH(geometry::pixelToUV(tileE * COARSE_TILE_SIZE, g_outputSize.xy)), MIN_DEPTH);
 
-            //if (any(aabb.begin.xy > tile.end.xy) || any(aabb.end.xy < tile.begin.xy))
+            if (any(aabb.begin.xy > tile.end.xy) || any(aabb.end.xy < tile.begin.xy))
             if (!aabb.intersects(tile))
                 continue;
             
