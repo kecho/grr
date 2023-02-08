@@ -26,7 +26,6 @@ print("device: {}".format(info[1]))
 initial_w = 1600 
 initial_h = 900
 geo = gpugeo.GpuGeo()
-geo.create_simple_triangle()
 rasterizer = raster.Rasterizer(initial_w, initial_h)
 active_editor = editor.Editor(geo, None)
 active_editor.load_editor_state()

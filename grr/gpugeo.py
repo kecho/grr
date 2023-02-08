@@ -38,12 +38,12 @@ class GpuGeo:
 
     
     #simple testing function
-    def create_simple_triangle(self):
+    def load_simple_triangle(self):
         tri_data = array.array('f', [
              #v.x,  v.y,  v.z,    # uv.x, uv.y, n.x,  n.y,  n.z
-               1.0,  -0.5,  2.0,  # 0.0,  0.0,  0.0,  0.0,  1.0,
-              -1.0,  -0.5,  2.0,  # 1.0,  0.0,  0.0,  0.0,  1.0,
-               0.0,   1.0,  -2.0  # 0.5,  1.0,  0.0,  0.0,  1.0
+               1.0,  -0.5,  -2.0,  # 0.0,  0.0,  0.0,  0.0,  1.0,
+              -1.0,  -0.5,  -2.0,  # 1.0,  0.0,  0.0,  0.0,  1.0,
+               0.0,   1.0,  2.0  # 0.5,  1.0,  0.0,  0.0,  1.0
         ])
 
         index_data = [0, 1, 2]

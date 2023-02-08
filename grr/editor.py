@@ -1,4 +1,5 @@
 import coalpy.gpu as g
+import inspect
 import numpy as np
 import os.path
 import sys
@@ -282,8 +283,14 @@ class Editor:
                         menu_results = [(imgui.menu_item(nm), nm) for nm in scenes.data.keys()]
                         valid_results = [nm for (is_selected, nm) in menu_results if is_selected == True]
                         if valid_results:
-                            self.m_active_scene_name = get_module_path() + scenes.data[valid_results[0]]
-                            self.reload_scene()
+                            scene_data = scenes.data[valid_results[0]]
+                            if inspect.isfunction(scene_data):
+                                self.m_active_scene_name = "Procedural"
+                                self.m_active_scene = None
+                                scene_data(self.m_geo)
+                            else:
+                                self.m_active_scene_name = get_module_path() + scene_data
+                                self.reload_scene()
                         imgui.end_menu()
                     imgui.end_menu()
                 imgui.end_menu()
