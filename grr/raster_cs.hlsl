@@ -1,6 +1,7 @@
 #include "geometry.hlsl"
 #include "raster_util.hlsl"
 #include "coverage.hlsl"
+#include "depth_utils.hlsl"
 
 #define FINE_TILE_THREAD_COUNT (FINE_TILE_SIZE * FINE_TILE_SIZE)
 #define COARSE_TILE_THREAD_COUNT (COARSE_TILE_SIZE * COARSE_TILE_SIZE)
@@ -73,7 +74,7 @@ void fineTileCullTriangleBatch(int groupThreadIndex, int3 groupID, int2 pixelCov
         th.init(tv, g_view, g_proj);
 
     #if ENABLE_FINE_COVERAGE_LUT 
-        if (asuint(th.aabb().end.z) < gs_furthestZ)
+        if (IsDepthLess(asuint(th.aabb().end.z), gs_furthestZ))
             triValid = 0;
         else
         {
@@ -87,7 +88,7 @@ void fineTileCullTriangleBatch(int groupThreadIndex, int3 groupID, int2 pixelCov
             triValid = all(coverageMask == 0) ? 0 : 1;
         }
     #else
-        triValid = asuint(th.aabb().end.z) >= gs_furthestZ && th.aabb().intersects(gs_tileBounds) ? 1 : 0;
+        triValid = IsDepthGreaterOrEqual(asuint(th.aabb().end.z), gs_furthestZ) && th.aabb().intersects(gs_tileBounds) ? 1 : 0;
     #endif
     } 
 
@@ -114,7 +115,7 @@ void nextTriangleBatch(int groupThreadIndex)
     {
         gs_tileCount -= TRIANGLE_CACHE_COUNT;
         gs_tileOffset += TRIANGLE_CACHE_COUNT;
-        gs_furthestZ = asuint(1.0);
+        gs_furthestZ = asuint(MAX_DEPTH);
     }
 }
 
@@ -146,16 +147,16 @@ void csMainFineRaster(
         gs_tileBounds.begin = float3(geometry::uvToH(geometry::pixelToUV(groupID.xy * FINE_TILE_SIZE, g_outputSize.xy)), 0.0);
         gs_tileBounds.end = float3(geometry::uvToH(geometry::pixelToUV((groupID.xy + int2(1,1)) * FINE_TILE_SIZE, g_outputSize.xy)), 1.0);
         gs_writtenFineTileCount = 0;
-        gs_furthestZ = asuint(1.0f);
+        gs_furthestZ = asuint(MAX_DEPTH);
     }
     
     GroupMemoryBarrierWithGroupSync();
 
-    float zBuffer = 0.0;
+    float zBuffer = MIN_DEPTH;
     while (gs_tileCount > 0)
     {
         uint unusedVal;
-        InterlockedMin(gs_furthestZ, asuint(zBuffer), unusedVal);
+        InterlockedMinDepth(gs_furthestZ, asuint(zBuffer), unusedVal);
         GroupMemoryBarrierWithGroupSync();
 
         fineTileCullTriangleBatch(groupThreadIndex, groupID, pixelCoverageCoordinate);
@@ -181,7 +182,7 @@ void csMainFineRaster(
                 float pZ = interpResult.eval(th.h0.z, th.h1.z, th.h2.z);
                 float pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
                 pZ *= rcp(pW);
-                if (pZ < 1.0 && pZ > zBuffer)
+                if (IsDepthGreater(pZ, zBuffer))
                 {
                     writeColor = true;
                     color.xyz = finalCol;
@@ -222,23 +223,6 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
 
     geometry::TriangleH th;
     th.init(tv, g_view, g_proj);
-
-    //float wEpsilon = 0.000001;
-    //if (th.h0.w < 0.0)
-    //{
-    //    th.h0 = float4(0.0,0.0,0.0,0.0);
-    //    th.p0 = float3(0.0,0.0,0.0);
-    //}
-    //if (th.h1.w < 0.0)
-    //{
-    //    th.h1 = float4(0.0,0.0,0.0,0.0);
-    //    th.p1 = float3(0.0,0.0,0.0);
-    //}
-    //if (th.h2.w < 0.0)
-    //{
-    //    th.h2 = float4(0.0,0.0,0.0,0.0);
-    //    th.p2 = float3(0.0,0.0,0.0);
-    //}
 
     //float wEpsilon = 0.001;
     //if (th.h0.w < wEpsilon || th.h1.w < wEpsilon || th.h2.w < wEpsilon)
