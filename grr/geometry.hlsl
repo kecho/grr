@@ -2,6 +2,7 @@
 #define __GEOMETRY__
 
 //Geometry file with utitlies and definitions.
+#include "depth_utils.hlsl"
 
 namespace geometry
 {

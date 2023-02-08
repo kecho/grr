@@ -54,6 +54,11 @@ groupshared geometry::AABB gs_tileBounds;
 groupshared uint gs_triangleBatchCount;
 groupshared uint gs_writtenFineTileCount;
 
+void initFurthestDepth()
+{
+    gs_furthestZ = asuint(MIN_DEPTH);
+}
+
 void fineTileCullTriangleBatch(int groupThreadIndex, int3 groupID, int2 pixelCoverageCoordinate)
 {
     float2 pixelCoverageUV = (pixelCoverageCoordinate + 0.5) / (float)FINE_TILE_SIZE;
@@ -75,8 +80,6 @@ void fineTileCullTriangleBatch(int groupThreadIndex, int3 groupID, int2 pixelCov
 
     #if ENABLE_FINE_COVERAGE_LUT 
         if (IsDepthLess(asuint(th.aabb().end.z), gs_furthestZ))
-            triValid = 0;
-        else
         {
             float2 v0 = ((((th.p0.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
             float2 v1 = ((((th.p1.xy * 0.5 + 0.5) * (float2)g_outputSizeInts)) - tileOffset) / (float)FINE_TILE_SIZE;
@@ -87,8 +90,10 @@ void fineTileCullTriangleBatch(int groupThreadIndex, int3 groupID, int2 pixelCov
             coverageMask = coverage::triangleCoverageMask(v0, v1, v2, true, false);
             triValid = all(coverageMask == 0) ? 0 : 1;
         }
+        else
+            triValid = 0;
     #else
-        triValid = IsDepthGreaterOrEqual(asuint(th.aabb().end.z), gs_furthestZ) && th.aabb().intersects(gs_tileBounds) ? 1 : 0;
+        triValid = IsDepthLess(asuint(th.aabb().end.z), gs_furthestZ) && th.aabb().intersects(gs_tileBounds) ? 1 : 0;
     #endif
     } 
 
@@ -115,7 +120,7 @@ void nextTriangleBatch(int groupThreadIndex)
     {
         gs_tileCount -= TRIANGLE_CACHE_COUNT;
         gs_tileOffset += TRIANGLE_CACHE_COUNT;
-        gs_furthestZ = asuint(MAX_DEPTH);
+        initFurthestDepth();
     }
 }
 
@@ -147,16 +152,16 @@ void csMainFineRaster(
         gs_tileBounds.begin = float3(geometry::uvToH(geometry::pixelToUV(groupID.xy * FINE_TILE_SIZE, g_outputSize.xy)), 0.0);
         gs_tileBounds.end = float3(geometry::uvToH(geometry::pixelToUV((groupID.xy + int2(1,1)) * FINE_TILE_SIZE, g_outputSize.xy)), 1.0);
         gs_writtenFineTileCount = 0;
-        gs_furthestZ = asuint(MAX_DEPTH);
+        initFurthestDepth();
     }
     
     GroupMemoryBarrierWithGroupSync();
 
-    float zBuffer = MIN_DEPTH;
+    float zBuffer = MAX_DEPTH;
     while (gs_tileCount > 0)
     {
         uint unusedVal;
-        InterlockedMinDepth(gs_furthestZ, asuint(zBuffer), unusedVal);
+        InterlockedMaxDepth(gs_furthestZ, asuint(zBuffer), unusedVal);
         GroupMemoryBarrierWithGroupSync();
 
         fineTileCullTriangleBatch(groupThreadIndex, groupID, pixelCoverageCoordinate);
@@ -182,7 +187,7 @@ void csMainFineRaster(
                 float pZ = interpResult.eval(th.h0.z, th.h1.z, th.h2.z);
                 float pW = interpResult.eval(th.h0.w, th.h1.w, th.h2.w);
                 pZ *= rcp(pW);
-                if (IsDepthGreater(pZ, zBuffer))
+                if (IsDepthLess(pZ, zBuffer))
                 {
                     writeColor = true;
                     color.xyz = finalCol;
@@ -227,6 +232,9 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
     //float wEpsilon = 0.001;
     //if (th.h0.w < wEpsilon || th.h1.w < wEpsilon || th.h2.w < wEpsilon)
     //    return;
+    
+    if (th.h0.z >= th.h0.w || th.h2.z >= th.h2.w || th.h1.z >= th.h1.w )
+        return;
 
     geometry::AABB aabb = th.aabb();
     if (any(aabb.begin.xy > float2(1,1)) || any(aabb.end.xy < float2(-1,-1)))
@@ -250,8 +258,8 @@ void csMainBinTriangles(int3 dti : SV_DispatchThreadID)
             int2 tileE = tileB + 1;
             geometry::AABB tile;
 
-            tile.begin = float3(geometry::uvToH(geometry::pixelToUV(tileB * COARSE_TILE_SIZE, g_outputSize.xy)), 0.0);
-            tile.end = float3(geometry::uvToH(geometry::pixelToUV(tileE * COARSE_TILE_SIZE, g_outputSize.xy)), 1.0);
+            tile.begin = float3(geometry::uvToH(geometry::pixelToUV(tileB * COARSE_TILE_SIZE, g_outputSize.xy)), 0);
+            tile.end = float3(geometry::uvToH(geometry::pixelToUV(tileE * COARSE_TILE_SIZE, g_outputSize.xy)), 1);
 
             //if (any(aabb.begin.xy > tile.end.xy) || any(aabb.end.xy < tile.begin.xy))
             if (!aabb.intersects(tile))
