@@ -104,7 +104,7 @@ Call this function to get a 64 bit coverage mask for a triangle.
 v0, v1, v2 - the triangle coordinates in right hand ruling order
 return - the coverage mask for this triangle
 */
-uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface);
+uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface, bool isConservative = false);
 
 
 /*
@@ -387,14 +387,30 @@ uint2 createCoverageMask(in LineArea lineArea)
 
 }
 
-uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface)
+uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface, bool isConservative)
 {
     uint2 mask0 = coverage::createCoverageMask(coverage::LineArea::create(v0, v1));
     uint2 mask1 = coverage::createCoverageMask(coverage::LineArea::create(v1, v2));
     uint2 mask2 = coverage::createCoverageMask(coverage::LineArea::create(v2, v0));
     uint2 frontMask = (mask0 & mask1 & mask2);
     bool frontMaskValid = any(mask0 != 0) || any(mask1 != 0) || any(mask2 != 0);
-    return (showFrontFace * (mask0 & mask1 & mask2)) | ((frontMaskValid && showBackface) * (~mask0 & ~mask1 & ~mask2));
+    uint2 triangleMask = (showFrontFace * (mask0 & mask1 & mask2)) | ((frontMaskValid && showBackface) * (~mask0 & ~mask1 & ~mask2));
+
+    if (isConservative)
+    {
+        triangleMask |= (triangleMask >> 1) & ~0x80808080u; //left
+        triangleMask |= (triangleMask << 1) & ~0x01010101u; //right
+
+        //top
+        triangleMask.x |= (triangleMask.y << 24) | (triangleMask.x >> 8);
+        triangleMask.y |= triangleMask.y >> 8;
+
+        //bottom
+        triangleMask.y |= (triangleMask.x >> 24) | (triangleMask.y << 8);
+        triangleMask.x |= triangleMask.x << 8;
+    }
+
+    return triangleMask;
 }
 
 uint2 lineCoverageMask(float2 v0, float2 v1, float thickness, float caps)
