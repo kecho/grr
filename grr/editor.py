@@ -331,6 +331,8 @@ class Editor:
                 if (imgui.button("reset")):
                     self.m_selected_viewport.reset_camera()
 
+                self.m_selected_viewport.m_cam_move_speed = imgui.slider_float(label="moving speed", v = self.m_selected_viewport.m_cam_move_speed, v_min = 0.01, v_max = 16.0)
+
             if (imgui.collapsing_header("Debug", g.ImGuiTreeNodeFlags.DefaultOpen)):
                 self.m_selected_viewport.debug_coarse_tiles = imgui.checkbox(label = "Show coarse tiles", v = self.m_selected_viewport.debug_coarse_tiles)
                 self.m_selected_viewport.debug_fine_tiles = imgui.checkbox(label = "Show fine tiles", v = self.m_selected_viewport.debug_fine_tiles)
