@@ -18,6 +18,10 @@ if selected_gpu is not None:
     print ("Setting gpu %d" % selected_gpu[0] )
     g.get_settings().adapter_index = selected_gpu[0]
 
+#g.get_settings().spirv_debug_reflection = True
+g.get_settings().enable_debug_device = False
+g.get_settings().graphics_api = "dx12"
+
 
 g_module_path = os.path.dirname(pathlib.Path(sys.modules[__name__].__file__)) + "\\"
 g.add_data_path(g_module_path)
