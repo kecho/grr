@@ -98,7 +98,7 @@ class Rasterizer:
         if self.m_constant_buffer is None:
             self.m_constant_buffer = g.Buffer(
                 name = "ConstantBuffer", type=g.BufferType.Standard,
-                format = g.Format.R32_FLOAT, element_count = len(const), is_constant_buffer = True)
+                format = g.Format.R32_FLOAT, element_count = len(const), usage = g.BufferUsage.Constant)
 
     
         cmd_list.upload_resource( source = const, destination = self.m_constant_buffer)
