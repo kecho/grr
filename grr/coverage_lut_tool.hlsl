@@ -175,7 +175,8 @@ void csMain(
 
         float lineThickness = g_lineArgs.x;
         float lineCap = g_lineArgs.y;
-        lineMask = showLine ? coverage::lineCoverageMask(verts.v3, verts.v4, lineThickness, lineCap) : 0;
+        //lineMask = showLine ? coverage::lineCoverageMask(verts.v3, verts.v4, lineThickness, lineCap) : 0;
+        lineMask = coverage::createCoverageMask(coverage::LineArea::create(verts.v3, verts.v4));
     }
 
     color = drawCoverageMask(color, triangleMask | lineMask, boardUv);

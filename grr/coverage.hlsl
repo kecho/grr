@@ -85,12 +85,12 @@ x component represents the first 32 bits, y component the next 32 bits.
 //**************************************************************************************************************/
 
 /*
-lut for 4x4 quad mask. See buildQuadMask function
+lut for 4x4 quad mask. See buildQuadMask function, packed in 16 bits.
 4 states for horizontal flipping and vertical flipping
 You can dump this lut to a buffer, and preload it manually,
 or just regenerated in your thread group
 */
-groupshared uint gs_quadMask[16 * 4]; 
+groupshared uint gs_quadMask[8]; 
 
 /*
 Call this function to generate the coverage 4x4 luts
@@ -142,7 +142,7 @@ uint buildQuadMask(uint incrementMask)
     uint mask = 0xF;
     for (int r = 0; r < 4; ++r)
     {
-        c |= mask << (r * 8);
+        c |= mask << ((3 - r) * 4);
         if (incrementMask == 0)
             break;
         int b = firstbitlow(incrementMask);
@@ -178,8 +178,8 @@ uint transposeQuad(uint mask)
     {
         for (int j = 0; j < 4; ++j)
         {
-            if (mask & (1u << (i * 8 + j)))
-                result |= 1u << (j * 8 + i);
+            if (mask & (1u << (i * 4 + j)))
+                result |= 1u << (j * 4 + i);
         }
     }
     return result;
@@ -188,23 +188,18 @@ uint transposeQuad(uint mask)
 // Builds all the luts necessary for fast bit based coverage
 void genLUT(uint groupThreadIndex)
 {
-    // Neutral
-    if (groupThreadIndex < 16)
-        gs_quadMask[groupThreadIndex] = buildQuadMask(groupThreadIndex);
-
-    GroupMemoryBarrierWithGroupSync();
-
-    // Flip in X axis, transpose
-    if (groupThreadIndex < 16)
+    if (groupThreadIndex < 8u)
     {
-        gs_quadMask[groupThreadIndex + 16] = flipQuadInX(gs_quadMask[groupThreadIndex]);
-        gs_quadMask[groupThreadIndex + 32] = transposeQuad(gs_quadMask[groupThreadIndex]);
+        uint m0 = buildQuadMask((groupThreadIndex << 1) | 0);
+        uint m1 = buildQuadMask((groupThreadIndex << 1) | 1);
+        gs_quadMask[groupThreadIndex] = m0 | (m1 << 16);
     }
-    GroupMemoryBarrierWithGroupSync();
-    if (groupThreadIndex < 16)
-    {
-        gs_quadMask[groupThreadIndex + 48] = (~transposeQuad(flipQuadInX(gs_quadMask[groupThreadIndex]))) & 0x0F0F0F0F;
-    }
+}
+
+uint sampleLUT(uint lookup)
+{
+    uint mask = (gs_quadMask[lookup >> 1] >> (16 * (lookup & 0x1))) & 0xFFFF;
+    return (mask & 0xF) | ((mask & 0xF0) << 4) | ((mask & 0xF00) << 8) | ((mask & 0xF000) << 12);
 }
 
 // Represents a 2D analytical line.
@@ -355,9 +350,10 @@ uint2 createCoverageMask(in LineArea lineArea)
     int2 ii = lineArea.flipX ? int2(1,0) : int2(0,1);
     int lutOperation = ((uint)lineArea.flipX << 4) | ((uint)lineArea.flipAxis << 5);
     int2 offsets = int2(lineArea.offsets[ii.x],lineArea.offsets[ii.y]);
-    uint2 halfSamples = uint2(gs_quadMask[lineArea.masks[ii.x] + lutOperation], gs_quadMask[lineArea.masks[ii.y] + lutOperation]);
+    uint2 halfSamples = uint2(sampleLUT(0), 0);
 
-    uint2 result = 0;
+    uint2 result = halfSamples;
+#if 0
     if (lineArea.flipAxis)
     {
         //Case were we have flipped axis / transpose. We generate top and bottom part
@@ -374,15 +370,16 @@ uint2 createCoverageMask(in LineArea lineArea)
     else
     {
         //Case were the masks are positioned horizontally. We generate 4 quads
-        uint2 sideMasks = uint2(halfSamples.x, (halfSamples.y << 4));
-        int4 tOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
-        uint4 halfMasks = select(tOffsets > 0, (~sideMasks.xyxy & horizontalMask.xyxy) << tOffsets, ~(sideMasks.xyxy >> -tOffsets)) & horizontalMask.xyxy;
-        result = uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
+        //uint2 sideMasks = uint2(halfSamples.x, (halfSamples.y << 4));
+        //int4 tOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
+        //uint4 halfMasks = select(tOffsets > 0, (~sideMasks.xyxy & horizontalMask.xyxy) << tOffsets, ~(sideMasks.xyxy >> -tOffsets)) & horizontalMask.xyxy;
+        result = halfSamples;//uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
     }
 
-    result = lineArea.flipX ? ~result : result;
-    result = lineArea.isRightHand ? result : ~result;
-    result = lineArea.isValid ? result : 0;
+    //result = lineArea.flipX ? ~result : result;
+    //result = lineArea.isRightHand ? result : ~result;
+    //result = lineArea.isValid ? result : 0;
+#endif
     return result;
 
 }
