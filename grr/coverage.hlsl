@@ -350,7 +350,11 @@ uint2 createCoverageMask(in LineArea lineArea)
     int2 ii = lineArea.flipX ? int2(1,0) : int2(0,1);
     int lutOperation = ((uint)lineArea.flipX << 4) | ((uint)lineArea.flipAxis << 5);
     int2 offsets = int2(lineArea.offsets[ii.x],lineArea.offsets[ii.y]);
+
+    //data.flipX, data.flipAxis, data.isRightHand, data.isValid
     uint2 halfSamples = uint2(sampleLUT(0), 0);
+    if (!lineArea.flipX || lineArea.flipAxis || lineArea.isRightHand)
+        halfSamples = 0;
 
     uint2 result = halfSamples;
 #if 0
