@@ -142,11 +142,11 @@ uint buildQuadMask(uint incrementMask)
     uint mask = 0xF;
     for (int r = 0; r < 4; ++r)
     {
-        c |= mask << ((3 - r) * 4);
+        c |= mask << (r * 4);
         if (incrementMask == 0)
             break;
         int b = firstbitlow(incrementMask);
-        mask = (0xFu << (b + 1)) & 0xFu;
+        mask = ((0xFu << (b + 1)) & 0xFu);
         incrementMask ^= 1u << b;
     }
 
@@ -333,10 +333,10 @@ struct LineArea
         uint4 dysmask1 = uint4(ysi1.yzw, 0) - uint4(ysi1.xyz, 0);
 
         // Final output, offset and mask
-        data.offsets[0] = ysi0.x;
         data.masks[0] = dysmask0.x | (dysmask0.y << 1) | (dysmask0.z << 2) | (dysmask0.w << 3);
-        data.offsets[1] = countbits(data.masks[0]) + data.offsets[0];
+        data.offsets[0] = ysi0.x;
         data.masks[1] = dysmask1.x | (dysmask1.y << 1) | (dysmask1.z << 2) | (dysmask1.w << 3);
+        data.offsets[1] =  countbits(data.masks[0]) + data.offsets[0];
         return data;
     }
 } ;
@@ -345,47 +345,17 @@ uint2 createCoverageMask(in LineArea lineArea)
 {
     const uint leftSideMask = 0x0F0F0F0F;
     const uint2 horizontalMask = uint2(leftSideMask, ~leftSideMask);
+    int2 offsets = int2(lineArea.offsets[0],lineArea.offsets[1]);
 
-    //prepare samples, flip samples if there is mirroring in x
-    int2 ii = lineArea.flipX ? int2(1,0) : int2(0,1);
-    int lutOperation = ((uint)lineArea.flipX << 4) | ((uint)lineArea.flipAxis << 5);
-    int2 offsets = int2(lineArea.offsets[ii.x],lineArea.offsets[ii.y]);
+    uint2 halfSamples = uint2(sampleLUT(lineArea.masks[0]), sampleLUT(lineArea.masks[1]));
+    
+    uint2 sideMasks = uint2(halfSamples.x, (halfSamples.y) << 4);
 
-    //data.flipX, data.flipAxis, data.isRightHand, data.isValid
-    uint2 halfSamples = uint2(sampleLUT(0), 0);
-    if (!lineArea.flipX || lineArea.flipAxis || lineArea.isRightHand)
-        halfSamples = 0;
+    // 4 quadrands (top left, top right, bottom left, bottom right)
+    int4 quadrantOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
 
-    uint2 result = halfSamples;
-#if 0
-    if (lineArea.flipAxis)
-    {
-        //Case were we have flipped axis / transpose. We generate top and bottom part
-        int2 tOffsets = clamp(offsets, -31, 31);
-        uint2 workMask = leftSideMask << clamp(offsets, 0, 4);
-        uint2 topDownMasks = select(tOffsets > 0,
-            ((halfSamples << min(4,tOffsets)) & leftSideMask) | ((halfSamples << min(8,tOffsets)) & ~leftSideMask),
-            (((halfSamples << 4) >> min(4,-tOffsets) & ~leftSideMask) >> 4));
-        int2 backMaskShift = select(lineArea.flipX, clamp(tOffsets + 4, -31, 31), tOffsets);
-        uint2 backMaskOp = (select(backMaskShift > 0, 1u << backMaskShift, 1u >> -backMaskShift) - 1u);
-        uint2 backBite = select(backMaskShift <= 0, (lineArea.flipX ? ~0x0 : 0x0), (lineArea.flipX ? (0xFF & ~backMaskOp) : (0xFFFF & backMaskOp)));
-        result = backBite | (backBite << 8) | (backBite << 16) | (backBite << 24) | (topDownMasks & workMask);
-    }
-    else
-    {
-        //Case were the masks are positioned horizontally. We generate 4 quads
-        //uint2 sideMasks = uint2(halfSamples.x, (halfSamples.y << 4));
-        //int4 tOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
-        //uint4 halfMasks = select(tOffsets > 0, (~sideMasks.xyxy & horizontalMask.xyxy) << tOffsets, ~(sideMasks.xyxy >> -tOffsets)) & horizontalMask.xyxy;
-        result = halfSamples;//uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
-    }
-
-    //result = lineArea.flipX ? ~result : result;
-    //result = lineArea.isRightHand ? result : ~result;
-    //result = lineArea.isValid ? result : 0;
-#endif
-    return result;
-
+    uint4 halfMasks = select(quadrantOffsets > 0, (~sideMasks.xyxy & horizontalMask.xyxy) << quadrantOffsets, ~(sideMasks.xyxy >> -quadrantOffsets)) & horizontalMask.xyxy;
+    return ~uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
 }
 
 uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface, bool isConservative)
