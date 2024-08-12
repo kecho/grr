@@ -153,38 +153,6 @@ uint buildQuadMask(uint incrementMask)
     return c;
 }
 
-//flip 4 bit nibble
-uint flipNibble(uint mask, int offset)
-{
-    mask = (mask >> offset) & 0xF;
-    uint r = ((mask << 3) & 0x8)
-           | ((mask << 1) & 0x4)
-           | ((mask >> 1) & 0x2)
-           | ((mask >> 3) & 0x1);
-    return (r << offset);
-}
-
-//flip an entire 4x4 bit quad
-uint flipQuadInX(uint mask)
-{
-    return flipNibble(mask, 0) | flipNibble(mask, 8) | flipNibble(mask, 16) | flipNibble(mask, 24);
-}
-
-uint transposeQuad(uint mask)
-{
-    uint result = 0;
-    [unroll]
-    for (int i = 0; i < 4; ++i)
-    {
-        for (int j = 0; j < 4; ++j)
-        {
-            if (mask & (1u << (i * 4 + j)))
-                result |= 1u << (j * 4 + i);
-        }
-    }
-    return result;
-}
-
 // Builds all the luts necessary for fast bit based coverage
 void genLUT(uint groupThreadIndex)
 {
@@ -200,6 +168,32 @@ uint sampleLUT(uint lookup)
 {
     uint mask = (gs_quadMask[lookup >> 1] >> (16 * (lookup & 0x1))) & 0xFFFF;
     return (mask & 0xF) | ((mask & 0xF0) << 4) | ((mask & 0xF00) << 8) | ((mask & 0xF000) << 12);
+}
+
+uint2 transposeCoverageMask(uint2 mask)
+{
+    //1x1 transpose
+    mask = ((mask & 0x00aa00aa) << 7) | ((mask & 0x55005500) >> 7) | (mask & 0xaa55aa55);
+
+    //2x2 transpose
+    mask = ((mask & 0x0000cccc) << 14) | ((mask & 0x33330000) >> 14) | (mask & 0xcccc3333);
+
+    //4x4
+    mask = uint2((mask.y & 0x0f0f0f0f) << 4, (mask.x & 0xf0f0f0f0) >> 4) | (mask & uint2(0x0f0f0f0f, 0xf0f0f0f0));
+    return mask;
+}
+
+uint2 mirrorXCoverageMask(uint2 mask)
+{
+    //flip 1 in x
+    mask = ((mask & 0x55555555) << 1) | ((mask & 0xaaaaaaaa) >> 1);
+
+    //flip 2 in x
+    mask = ((mask & 0xcccccccc) >> 2) | ((mask & 0x33333333) << 2);
+
+    //flip 4 in x
+    mask = ((mask & 0xf0f0f0f0) >> 4) | ((mask & 0x0f0f0f0f) << 4);
+    return mask;
 }
 
 // Represents a 2D analytical line.
@@ -355,7 +349,9 @@ uint2 createCoverageMask(in LineArea lineArea)
     int4 quadrantOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
 
     uint4 halfMasks = select(quadrantOffsets > 0, (~sideMasks.xyxy & horizontalMask.xyxy) << quadrantOffsets, ~(sideMasks.xyxy >> -quadrantOffsets)) & horizontalMask.xyxy;
-    return ~uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
+    uint2 coverageMask = ~uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
+    //return transposeCoverageMask(coverageMask);
+    return mirrorXCoverageMask(coverageMask);
 }
 
 uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface, bool isConservative)
