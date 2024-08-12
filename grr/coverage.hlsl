@@ -196,6 +196,23 @@ uint2 mirrorXCoverageMask(uint2 mask)
     return mask;
 }
 
+uint2 mirrorYCoverageMask(uint2 mask)
+{
+    //flip 4 in y
+    mask.yx = mask;
+    //flip 2 in y
+    mask = ((mask & 0x0000ffff) << (uint2)16u) | ((mask & 0xffff0000) >> (uint2)16u);
+    //flip 1 in y
+    mask = ((mask & 0x00ff00ff) << 8) | ((mask & 0xff00ff00) >> 8);
+
+    return  mask;
+}
+
+#define LINEOP_TRANSPOSE (1 << 0)
+#define LINEOP_X_FLIP (1 << 1)
+#define LINEOP_Y_FLIP (1 << 2)
+#define LINEOP_VALID (1 << 3)
+
 // Represents a 2D analytical line.
 // stores slope (a) and offset (b)
 struct Line
@@ -216,32 +233,39 @@ struct Line
     // Builds a "Flipped" line.
     // A flipped line is defined as having a positive slope < 1.0 
     // The two output booleans specify the flip operators to recover the original line.
-    void buildFlipped(float2 v0, float2 v1, out bool outFlipX, out bool outFlipAxis, out bool outIsRightHand, out bool outValid)
+    void buildFlipped(float2 v0, float2 v1, out uint op)
     {
         //build line with flip bits for lookup compression
         //This line will have a slope between 0 and 0.5, and always positive.
         //We output the flips as bools
 
+        op = 0u;
+
+        if (v0.x > v1.x)
+        {
+            op |= LINEOP_X_FLIP;
+            v0.x = 1.0 - v0.x;
+            v1.x = 1.0 - v1.x;
+        }
+        if (v0.y > v1.y)
+        {
+            op |= LINEOP_Y_FLIP;
+            v0.y = 1.0 - v0.y;
+            v1.y = 1.0 - v1.y;
+        }
+
         float2 ll = v1 - v0;
-        outFlipAxis = abs(ll.y) > abs(ll.x);
-        outFlipX = sign(ll.y) != sign(ll.x);
-        outIsRightHand = ll.x >= 0 ? v0.y >= v1.y : v0.y > v1.y;
-        if (outFlipAxis)
+        op |= abs(ll.y) > abs(ll.x) ? LINEOP_TRANSPOSE : 0u;
+        if (op & LINEOP_TRANSPOSE)
         {
             ll.xy = ll.yx;
             v0.xy = v0.yx;
             v1.xy = v1.yx;
         }
 
+        op |= any(v1 != v0) ? LINEOP_VALID : 0;
         a = ll.y/ll.x;
-        if (outFlipX)
-        {
-            v0.x = 1.0 - v0.x;
-            v1.x = 1.0 - v1.x;
-            a *= -1;
-        }
         b = v1.y - a * v1.x;
-        outValid = any(v1 != v0);//ll.y != 0.0f;
     }
 
     // Evaluates f(x) = a * x + b for the line
@@ -274,9 +298,7 @@ struct LineArea
     int offsets[2];
     uint masks[2];
     bool isValid;
-    bool flipX;
-    bool flipAxis;
-    bool isRightHand;
+    uint op;
     Line debugLine;
 
     // Recovers a single point in the boundary
@@ -284,18 +306,8 @@ struct LineArea
     // Theres a total of 8 possible points
     float2 getBoundaryPoint(uint i)
     {
-        int j = i & 0x3;
-        int m = i >> 2;
-        int yval = offsets[m] + (int)countbits(((1u << j) - 1) & masks[m]);
-        float2 v = float2(i + 0.5, yval + 0.5) * 1.0/8.0;
-        if (flipX)
-            v.x = 1.0 - v.x;
-        if (flipAxis)
-        {
-            float2 tmp = v;
-            v.xy = tmp.yx;
-        }
-        return v;
+        //TODO: delete
+        return 0;
     }
     
     // Creates a line area object, based on 2 points on an 8x8 quad
@@ -309,7 +321,7 @@ struct LineArea
         data.debugLine.build(v0, v1);
 
         Line l;
-        l.buildFlipped(v0, v1, data.flipX, data.flipAxis, data.isRightHand, data.isValid);
+        l.buildFlipped(v0, v1, data.op);
 
         // Xs values of 8 points
         const float4 xs0 = float4(0.5,1.5,2.5,3.5)/8.0;
@@ -349,9 +361,11 @@ uint2 createCoverageMask(in LineArea lineArea)
     int4 quadrantOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
 
     uint4 halfMasks = select(quadrantOffsets > 0, (~sideMasks.xyxy & horizontalMask.xyxy) << quadrantOffsets, ~(sideMasks.xyxy >> -quadrantOffsets)) & horizontalMask.xyxy;
-    uint2 coverageMask = ~uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
-    //return transposeCoverageMask(coverageMask);
-    return mirrorXCoverageMask(coverageMask);
+    uint2 coverageMask = uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
+    coverageMask = (lineArea.op & LINEOP_TRANSPOSE) ? ~transposeCoverageMask(coverageMask) : coverageMask;
+    coverageMask = (lineArea.op & LINEOP_X_FLIP) ? ~mirrorXCoverageMask(coverageMask) : coverageMask;
+    coverageMask = (lineArea.op & LINEOP_Y_FLIP) ? ~mirrorYCoverageMask(coverageMask) : coverageMask;
+    return (lineArea.op & LINEOP_VALID) ? coverageMask : 0u;
 }
 
 uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface, bool isConservative)
