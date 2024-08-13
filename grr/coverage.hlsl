@@ -43,7 +43,12 @@ GroupMemoryBarrierWithGroupSync();
 
 Alternatively, you can dump the contents into buffer. The contents of the LUT are inside gs_quadMask, which is 64 entries.
 
-After this use the coverage functions
+After this use the coverage functions. For example:
+
+uint2 lineCoverage = coverage::lineCoverageMask(float2(0.0, 0.0), float2(0.5, 0.5), 0.2, 0.2);
+
+This line will hold a 8x8 mask of coverage for such line.
+
 
 */
 
@@ -73,24 +78,8 @@ any points outside of the range (0,1) means they are outside the grid.
 */
 
 //**************************************************************************************************************/
-//                                           Masks 
-//**************************************************************************************************************/
-/*
-Masks are stored in a packed 64 bit represented by uint2.
-x component represents the first 32 bits, y component the next 32 bits.
-*/
-
-//**************************************************************************************************************/
 //                                           coverage API
 //**************************************************************************************************************/
-
-/*
-lut for 4x4 quad mask. See buildQuadMask function, packed in 16 bits.
-4 states for horizontal flipping and vertical flipping
-You can dump this lut to a buffer, and preload it manually,
-or just regenerated in your thread group
-*/
-groupshared uint gs_quadMask[8]; 
 
 /*
 Call this function to generate the coverage 4x4 luts
@@ -153,6 +142,14 @@ uint buildQuadMask(uint incrementMask)
     return c;
 }
 
+/*
+lut for 4x4 quad mask. See buildQuadMask function, packed in 16 bits.
+4 states for horizontal flipping and vertical flipping
+You can dump this lut to a buffer, and preload it manually,
+or just regenerated in your thread group
+*/
+groupshared uint gs_quadMask[8]; 
+
 // Builds all the luts necessary for fast bit based coverage
 void genLUT(uint groupThreadIndex)
 {
@@ -208,10 +205,10 @@ uint2 mirrorYCoverageMask(uint2 mask)
     return  mask;
 }
 
-#define LINEOP_TRANSPOSE (1 << 0)
-#define LINEOP_X_FLIP (1 << 1)
-#define LINEOP_Y_FLIP (1 << 2)
-#define LINEOP_VALID (1 << 3)
+#define COVERAGE_LINE_FLAGS_TRANSPOSE (1 << 0)
+#define COVERAGE_LINE_FLAGS_X_FLIP (1 << 1)
+#define COVERAGE_LINE_FLAGS_Y_FLIP (1 << 2)
+#define COVERAGE_LINE_FLAGS_VALID (1 << 3)
 
 // Represents a 2D analytical line.
 // stores slope (a) and offset (b)
@@ -219,54 +216,6 @@ struct Line
 {
     float a;
     float b;
-
-    // Builds an analytical line based on two points.
-    void build(float2 v0, float2 v1)
-    {
-        //line equation: f(x): a * x + b;
-        // where a = (v1.y - v0.y)/(v1.x - v0.x)
-        float2 l = v1 - v0;
-        a = l.y/l.x;
-        b = v1.y - a * v1.x;
-    }
-
-    // Builds a "Flipped" line.
-    // A flipped line is defined as having a positive slope < 1.0 
-    // The two output booleans specify the flip operators to recover the original line.
-    void buildFlipped(float2 v0, float2 v1, out uint op)
-    {
-        //build line with flip bits for lookup compression
-        //This line will have a slope between 0 and 0.5, and always positive.
-        //We output the flips as bools
-
-        op = 0u;
-
-        if (v0.x > v1.x)
-        {
-            op |= LINEOP_X_FLIP;
-            v0.x = 1.0 - v0.x;
-            v1.x = 1.0 - v1.x;
-        }
-        if (v0.y > v1.y)
-        {
-            op |= LINEOP_Y_FLIP;
-            v0.y = 1.0 - v0.y;
-            v1.y = 1.0 - v1.y;
-        }
-
-        float2 ll = v1 - v0;
-        op |= abs(ll.y) > abs(ll.x) ? LINEOP_TRANSPOSE : 0u;
-        if (op & LINEOP_TRANSPOSE)
-        {
-            ll.xy = ll.yx;
-            v0.xy = v0.yx;
-            v1.xy = v1.yx;
-        }
-
-        op |= any(v1 != v0) ? LINEOP_VALID : 0;
-        a = ll.y/ll.x;
-        b = v1.y - a * v1.x;
-    }
 
     // Evaluates f(x) = a * x + b for the line
     float eval(float xval)
@@ -287,6 +236,72 @@ struct Line
     }
 };
 
+
+// Builds an analytical line based on two points.
+Line buildLine(float2 v0, float2 v1)
+{
+    //line equation: f(x): a * x + b;
+    // where a = (v1.y - v0.y)/(v1.x - v0.x)
+    float2 l = v1 - v0;
+    Line li;
+    li.a = l.y/l.x;
+    li.b = v1.y - li.a * v1.x;
+    return li;
+}
+
+
+// Builds a "Positive" line.
+// A positive line is defined as having a positive slope less than 1.0.
+// The positive line stores also flags that can be used to recover the original line.
+Line buildPositiveLine(float2 v0, float2 v1, out uint flags)
+{
+    //build line with flip bits for lookup compression
+    //This line will have a slope between 0 and 0.5, and always positive.
+    //We output the flips as bools
+
+    Line li;
+    flags = 0u;
+
+    if (v0.x > v1.x)
+    {
+        flags |= COVERAGE_LINE_FLAGS_X_FLIP;
+        v0.x = 1.0 - v0.x;
+        v1.x = 1.0 - v1.x;
+    }
+    if (v0.y > v1.y)
+    {
+        flags |= COVERAGE_LINE_FLAGS_Y_FLIP;
+        v0.y = 1.0 - v0.y;
+        v1.y = 1.0 - v1.y;
+    }
+
+    float2 ll = v1 - v0;
+    flags |= abs(ll.y) > abs(ll.x) ? COVERAGE_LINE_FLAGS_TRANSPOSE : 0u;
+    if (flags & COVERAGE_LINE_FLAGS_TRANSPOSE)
+    {
+        ll.xy = ll.yx;
+        v0.xy = v0.yx;
+        v1.xy = v1.yx;
+    }
+
+    flags |= any(v1 != v0) ? COVERAGE_LINE_FLAGS_VALID : 0;
+    li.a = ll.y/ll.x;
+    li.b = v1.y - li.a * v1.x;
+    return li;
+}
+
+// Packing
+// [bits] | [data]
+//  0-3   | left_mask
+//  4-7   | right_mask
+//  8-11  | left_offset
+//  12-15 | right_offset
+//  16-20 | flags 
+#define COVERAGE_DATA_BIT_MASK ((1u << 4) - 1u)
+#define COVERAGE_LEFT_MASK_BIT_SHIFT 0
+#define COVERAGE_RIGHT_MASK_BIT_SHIFT 4
+#define COVERAGE_FLAGS_OFFSET_BIT_SHIFT 8
+
 /*
 Represents a set of bits in an 8x8 grid divided by a line.
 The representation is given by 2 splits of the 8x8 grid.
@@ -295,84 +310,80 @@ the mask represents the increment mask used to look up the quadCoverage
 */
 struct LineArea
 {
-    int offsets[2];
-    uint masks[2];
-    bool isValid;
-    uint op;
+    uint coverageData;
+    int2 offsets;
     Line debugLine;
-
-    // Recovers a single point in the boundary
-    // of the line (where the line intersects a pixel).
-    // Theres a total of 8 possible points
-    float2 getBoundaryPoint(uint i)
-    {
-        //TODO: delete
-        return 0;
-    }
-    
-    // Creates a line area object, based on 2 points on an 8x8 quad
-    // quad coordinate domain is 0.0 -> 1.0 for both axis.
-    // Anything negative or greater than 1.0 is by definition outside of the 8x8 quad.
-    static LineArea create(float2 v0, float2 v1)
-    {
-        LineArea data;
-
-        //line debug data
-        data.debugLine.build(v0, v1);
-
-        Line l;
-        l.buildFlipped(v0, v1, data.op);
-
-        // Xs values of 8 points
-        const float4 xs0 = float4(0.5,1.5,2.5,3.5)/8.0;
-        const float4 xs1 = float4(4.5,5.5,6.5,7.5)/8.0;
-
-        // Ys values of 8 points
-        float4 ys0 = l.eval4(xs0);
-        float4 ys1 = l.eval4(xs1);
-
-        int4 ysi0 = (int4)floor(ys0 * 8.0 - 0.5);
-        int4 ysi1 = (int4)floor(ys1 * 8.0 - 0.5);
-
-        // Incremental masks
-        uint4 dysmask0 = uint4(ysi0.yzw, ysi1.x) - ysi0.xyzw;
-        uint4 dysmask1 = uint4(ysi1.yzw, 0) - uint4(ysi1.xyz, 0);
-
-        // Final output, offset and mask
-        data.masks[0] = dysmask0.x | (dysmask0.y << 1) | (dysmask0.z << 2) | (dysmask0.w << 3);
-        data.offsets[0] = ysi0.x;
-        data.masks[1] = dysmask1.x | (dysmask1.y << 1) | (dysmask1.z << 2) | (dysmask1.w << 3);
-        data.offsets[1] =  countbits(data.masks[0]) + data.offsets[0];
-        return data;
-    }
 } ;
+
+// Creates a line area object, based on 2 points on an 8x8 quad
+// quad coordinate domain is 0.0 -> 1.0 for both axis.
+// Anything negative or greater than 1.0 is by definition outside of the 8x8 quad.
+LineArea buildLineArea(float2 v0, float2 v1)
+{
+    LineArea data;
+
+    //line debug data
+    data.debugLine = buildLine(v0, v1);
+
+    uint flags;
+    Line l = buildPositiveLine(v0, v1, flags);
+    data.coverageData = (flags & COVERAGE_DATA_BIT_MASK) << COVERAGE_FLAGS_OFFSET_BIT_SHIFT;
+
+    // Xs values of 8 points
+    const float4 xs0 = float4(0.5,1.5,2.5,3.5)/8.0;
+    const float4 xs1 = float4(4.5,5.5,6.5,7.5)/8.0;
+
+    // Ys values of 8 points
+    float4 ys0 = l.eval4(xs0);
+    float4 ys1 = l.eval4(xs1);
+
+    int4 ysi0 = clamp((int4)floor(ys0 * 8.0 - 0.5), -1,8);
+    int4 ysi1 = clamp((int4)floor(ys1 * 8.0 - 0.5), -1,8);
+
+    // Incremental masks
+    uint4 dysmask0 = uint4(ysi0.yzw, ysi1.x) - ysi0.xyzw;
+    uint4 dysmask1 = uint4(ysi1.yzw, 0) - uint4(ysi1.xyz, 0);
+
+
+    // Final output, offset and mask
+    uint mask0 = dysmask0.x | (dysmask0.y << 1) | (dysmask0.z << 2) | (dysmask0.w << 3);
+    data.coverageData |= (mask0 & COVERAGE_DATA_BIT_MASK) << COVERAGE_LEFT_MASK_BIT_SHIFT;
+    uint mask1 = dysmask1.x | (dysmask1.y << 1) | (dysmask1.z << 2) | (dysmask1.w << 3);
+    data.coverageData |= (mask1 & COVERAGE_DATA_BIT_MASK) << COVERAGE_RIGHT_MASK_BIT_SHIFT;
+    data.offsets = int2(ysi0.x, countbits(mask0) + ysi0.x);
+
+    return data;
+}
 
 uint2 createCoverageMask(in LineArea lineArea)
 {
     const uint leftSideMask = 0x0F0F0F0F;
     const uint2 horizontalMask = uint2(leftSideMask, ~leftSideMask);
-    int2 offsets = int2(lineArea.offsets[0],lineArea.offsets[1]);
+    int2 offsets = lineArea.offsets;
 
-    uint2 halfSamples = uint2(sampleLUT(lineArea.masks[0]), sampleLUT(lineArea.masks[1]));
+    uint2 halfSamples = uint2(
+        sampleLUT((lineArea.coverageData >> COVERAGE_LEFT_MASK_BIT_SHIFT) & COVERAGE_DATA_BIT_MASK),
+        sampleLUT((lineArea.coverageData >> COVERAGE_RIGHT_MASK_BIT_SHIFT) & COVERAGE_DATA_BIT_MASK));
     
     uint2 sideMasks = uint2(halfSamples.x, (halfSamples.y) << 4);
 
     // 4 quadrands (top left, top right, bottom left, bottom right)
     int4 quadrantOffsets = clamp((offsets.xyxy - int4(0,0,4,4)) << 3, -31, 31);
 
+    uint flags = (lineArea.coverageData >> COVERAGE_FLAGS_OFFSET_BIT_SHIFT) & COVERAGE_DATA_BIT_MASK;
     uint4 halfMasks = select(quadrantOffsets > 0, (~sideMasks.xyxy & horizontalMask.xyxy) << quadrantOffsets, ~(sideMasks.xyxy >> -quadrantOffsets)) & horizontalMask.xyxy;
     uint2 coverageMask = uint2(halfMasks.x | halfMasks.y, halfMasks.z | halfMasks.w);
-    coverageMask = (lineArea.op & LINEOP_TRANSPOSE) ? ~transposeCoverageMask(coverageMask) : coverageMask;
-    coverageMask = (lineArea.op & LINEOP_X_FLIP) ? ~mirrorXCoverageMask(coverageMask) : coverageMask;
-    coverageMask = (lineArea.op & LINEOP_Y_FLIP) ? ~mirrorYCoverageMask(coverageMask) : coverageMask;
-    return (lineArea.op & LINEOP_VALID) ? ~coverageMask : 0u;
+    coverageMask = (flags & COVERAGE_LINE_FLAGS_TRANSPOSE) ? ~transposeCoverageMask(coverageMask) : coverageMask;
+    coverageMask = (flags & COVERAGE_LINE_FLAGS_X_FLIP) ? ~mirrorXCoverageMask(coverageMask) : coverageMask;
+    coverageMask = (flags & COVERAGE_LINE_FLAGS_Y_FLIP) ? ~mirrorYCoverageMask(coverageMask) : coverageMask;
+    return (flags & COVERAGE_LINE_FLAGS_VALID) ? ~coverageMask : 0u;
 }
 
 uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface, bool isConservative)
 {
-    uint2 mask0 = coverage::createCoverageMask(coverage::LineArea::create(v0, v1));
-    uint2 mask1 = coverage::createCoverageMask(coverage::LineArea::create(v1, v2));
-    uint2 mask2 = coverage::createCoverageMask(coverage::LineArea::create(v2, v0));
+    uint2 mask0 = coverage::createCoverageMask(coverage::buildLineArea(v0, v1));
+    uint2 mask1 = coverage::createCoverageMask(coverage::buildLineArea(v1, v2));
+    uint2 mask2 = coverage::createCoverageMask(coverage::buildLineArea(v2, v0));
     uint2 frontMask = (mask0 & mask1 & mask2);
     bool frontMaskValid = any(mask0 != 0) || any(mask1 != 0) || any(mask2 != 0);
     uint2 triangleMask = (showFrontFace * (mask0 & mask1 & mask2)) | ((frontMaskValid && showBackface) * (~mask0 & ~mask1 & ~mask2));
@@ -401,13 +412,14 @@ uint2 lineCoverageMask(float2 v0, float2 v1, float thickness, float caps)
     v0 -= caps * lineVector;
     v1 += caps * lineVector;
     
-    uint2 mask0 = coverage::createCoverageMask(coverage::LineArea::create(v0 - D, v1 - D));
-    uint2 mask1 = coverage::createCoverageMask(coverage::LineArea::create(v1 + D, v0 + D));
-    uint2 mask2 = coverage::createCoverageMask(coverage::LineArea::create(v0 + D, v0 - D));
-    uint2 mask3 = coverage::createCoverageMask(coverage::LineArea::create(v1 - D, v1 + D));
+    uint2 mask0 = coverage::createCoverageMask(coverage::buildLineArea(v0 - D, v1 - D));
+    uint2 mask1 = coverage::createCoverageMask(coverage::buildLineArea(v1 + D, v0 + D));
+    uint2 mask2 = coverage::createCoverageMask(coverage::buildLineArea(v0 + D, v0 - D));
+    uint2 mask3 = coverage::createCoverageMask(coverage::buildLineArea(v1 - D, v1 + D));
     return mask0 & mask1 & mask3 & mask2;
 }
 
 }
 
 #endif
+

@@ -87,16 +87,6 @@ float3 drawLine(float3 col, float2 v0, float2 v1, float2 uv)
     return col;
 }
 
-float3 drawBaseMask(float3 col, in coverage::LineArea lineArea, uint i, float2 uv)
-{
-    float2 gridUV = getGridUV(uv);
-    float d = distance(gridUV, lineArea.getBoundaryPoint(i) * 8.0);
-    if (d > 0.1)
-        return col;
-
-    return float3(0.0,0.0,0.1);
-}
-
 float3 drawCoverageMask(float3 col, uint2 coverageMask, float2 uv)
 {
     float2 gridUV = getGridUV(uv);
@@ -175,8 +165,8 @@ void csMain(
 
         float lineThickness = g_lineArgs.x;
         float lineCap = g_lineArgs.y;
-        //lineMask = showLine ? coverage::lineCoverageMask(verts.v3, verts.v4, lineThickness, lineCap) : 0;
-        lineMask = coverage::lineCoverageMask(verts.v3, verts.v4, lineThickness, lineCap);
+        lineMask = showLine ? coverage::lineCoverageMask(verts.v3, verts.v4, lineThickness, lineCap) : 0;
+        //lineMask = coverage::lineCoverageMask(verts.v3, verts.v4, lineThickness, lineCap);
     }
 
     color = drawCoverageMask(color, triangleMask | lineMask, boardUv);
