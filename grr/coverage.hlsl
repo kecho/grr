@@ -365,7 +365,7 @@ uint2 createCoverageMask(in LineArea lineArea)
     coverageMask = (lineArea.op & LINEOP_TRANSPOSE) ? ~transposeCoverageMask(coverageMask) : coverageMask;
     coverageMask = (lineArea.op & LINEOP_X_FLIP) ? ~mirrorXCoverageMask(coverageMask) : coverageMask;
     coverageMask = (lineArea.op & LINEOP_Y_FLIP) ? ~mirrorYCoverageMask(coverageMask) : coverageMask;
-    return (lineArea.op & LINEOP_VALID) ? coverageMask : 0u;
+    return (lineArea.op & LINEOP_VALID) ? ~coverageMask : 0u;
 }
 
 uint2 triangleCoverageMask(float2 v0, float2 v1, float2 v2, bool showFrontFace, bool showBackface, bool isConservative)
